@@ -217,6 +217,14 @@ class GuiManager {
         result := StrReplace(result, "《SHIFT》", "Shift+")
         result := StrReplace(result, "《WIN》", "Win+")
 
+        ; 将字母转为大写显示（更美观）
+        result := StrUpper(result)
+        ; 恢复修饰键的正确大小写
+        result := StrReplace(result, "CTRL+", "Ctrl+")
+        result := StrReplace(result, "ALT+", "Alt+")
+        result := StrReplace(result, "SHIFT+", "Shift+")
+        result := StrReplace(result, "WIN+", "Win+")
+
         return result
     }
 
@@ -229,18 +237,29 @@ class GuiManager {
 
         result := displayName
 
-        ; 鼠标按键
-        result := StrReplace(result, "鼠标侧键1", "XButton1")
-        result := StrReplace(result, "鼠标侧键2", "XButton2")
-        result := StrReplace(result, "鼠标中键", "MButton")
+        ; 鼠标按键（先用占位符保护，避免被后面的小写转换影响）
+        result := StrReplace(result, "鼠标侧键1", "《XBUTTON1》")
+        result := StrReplace(result, "鼠标侧键2", "《XBUTTON2》")
+        result := StrReplace(result, "鼠标中键", "《MBUTTON》")
 
-        ; 特殊键名（先处理，避免被修饰键替换干扰）
-        result := StrReplace(result, "右Alt", "RAlt")
-        result := StrReplace(result, "左Alt", "LAlt")
-        result := StrReplace(result, "右Ctrl", "RCtrl")
-        result := StrReplace(result, "左Ctrl", "LCtrl")
-        result := StrReplace(result, "右Shift", "RShift")
-        result := StrReplace(result, "左Shift", "LShift")
+        ; 特殊键名（先处理，用占位符保护）
+        result := StrReplace(result, "右Alt", "《RALT》")
+        result := StrReplace(result, "左Alt", "《LALT》")
+        result := StrReplace(result, "右Ctrl", "《RCTRL》")
+        result := StrReplace(result, "左Ctrl", "《LCTRL》")
+        result := StrReplace(result, "右Shift", "《RSHIFT》")
+        result := StrReplace(result, "左Shift", "《LSHIFT》")
+
+        ; 保护功能键 F1-F12
+        Loop 12 {
+            result := StrReplace(result, "F" . A_Index, "《F" . A_Index . "》")
+        }
+
+        ; 保护其他特殊键名
+        specialKeys := ["Space", "Tab", "Enter", "Escape", "Backspace", "Delete", "Insert", "Home", "End", "PgUp", "PgDn", "Up", "Down", "Left", "Right", "CapsLock", "NumLock", "ScrollLock", "PrintScreen", "Pause"]
+        for key in specialKeys {
+            result := StrReplace(result, key, "《" . key . "》")
+        }
 
         ; 修饰键（显示格式 -> AHK格式）
         ; Ctrl+, Alt+, Shift+, Win+ 转换为 ^, !, +, #
@@ -248,6 +267,30 @@ class GuiManager {
         result := StrReplace(result, "Alt+", "!")
         result := StrReplace(result, "Shift+", "+")
         result := StrReplace(result, "Win+", "#")
+
+        ; 将剩余部分转为小写（主要是字母键，如 D -> d）
+        result := StrLower(result)
+
+        ; 恢复特殊键名（从占位符恢复为正确的 AHK 键名）
+        result := StrReplace(result, "《xbutton1》", "XButton1")
+        result := StrReplace(result, "《xbutton2》", "XButton2")
+        result := StrReplace(result, "《mbutton》", "MButton")
+        result := StrReplace(result, "《ralt》", "RAlt")
+        result := StrReplace(result, "《lalt》", "LAlt")
+        result := StrReplace(result, "《rctrl》", "RCtrl")
+        result := StrReplace(result, "《lctrl》", "LCtrl")
+        result := StrReplace(result, "《rshift》", "RShift")
+        result := StrReplace(result, "《lshift》", "LShift")
+
+        ; 恢复功能键
+        Loop 12 {
+            result := StrReplace(result, "《f" . A_Index . "》", "F" . A_Index)
+        }
+
+        ; 恢复其他特殊键名
+        for key in specialKeys {
+            result := StrReplace(result, "《" . StrLower(key) . "》", key)
+        }
 
         return result
     }
@@ -335,9 +378,9 @@ class GuiManager {
         ; 检测字母键
         if mainKey = "" {
             Loop 26 {
-                letter := Chr(64 + A_Index)  ; A-Z
+                letter := Chr(64 + A_Index)  ; A-Z (用于 GetKeyState 检测)
                 if GetKeyState(letter, "P") {
-                    mainKey := letter
+                    mainKey := StrLower(letter)  ; 转为小写保存，避免 AHK 将大写解释为 Shift+字母
                     break
                 }
             }
