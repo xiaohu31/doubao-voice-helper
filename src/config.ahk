@@ -9,12 +9,12 @@ class Config {
         "HoldToTalkKey", "XButton1",
         "FreeToTalkKey", "XButton2",
         "DouBaoHotkey", "^d",
-        "InsertDelay", 1500,
+        "InsertDelay", 500,
         "ClipboardProtect", 1,
         "AutoStart", 0,
         "FocusRecovery", 1,
         "ShowTrayTip", 1,
-        "ClipboardTimeout", 500,
+        "ClipboardTimeout", 150,
         "MinHoldDuration", 300
     )
 
@@ -49,6 +49,7 @@ class Config {
     }
 
     ; 初始化配置
+    ; 返回值：true = 配置文件存在（非首次运行），false = 配置文件不存在（首次运行）
     static Init() {
         ; 先加载默认值
         for key, value in this.Default {
@@ -56,7 +57,7 @@ class Config {
         }
 
         ; 从文件加载（如果存在）
-        this.Load()
+        return this.Load()
     }
 
     ; 从INI文件加载配置

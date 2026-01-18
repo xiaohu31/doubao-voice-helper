@@ -29,8 +29,8 @@ class VoiceController {
 
     ; 初始化
     static Init() {
-        ; 加载配置
-        Config.Init()
+        ; 加载配置并检查是否是首次运行（配置文件不存在）
+        isFirstRun := !Config.Init()
 
         ; 设置热键回调
         HotkeyManager.SetCallbacks(
@@ -47,6 +47,10 @@ class VoiceController {
 
         ; 设置托盘
         this.SetupTray()
+
+        ; 如果是首次运行，弹出设置界面
+        if isFirstRun
+            GuiManager.Show()
     }
 
     ; 初始化热键
@@ -230,19 +234,7 @@ class VoiceController {
             return
         }
 
-        ; 0.5 提前检测：如果悬浮窗无内容，直接关闭（优化自由说模式体验）
-        ; 检查悬浮窗是否存在且无识别内容
-        if DoubaoWindow.IsVoiceWindowExist() && !DoubaoWindow.HasVoiceContent() {
-            ; 悬浮窗存在但无内容，说明用户没说话
-            ; 直接发送 ESC 关闭，跳过等待流程
-            DoubaoWindow.SendEscape()
-            this.IsProcessing := false
-            HotkeyManager.ResetState()
-            ; 静默处理，不显示提示
-            return
-        }
-
-        ; 1. 等待识别延迟
+        ; 1. 等待识别延迟（给豆包时间完成语音识别）
         delay := Config.Get("InsertDelay")
         Sleep(delay)
 

@@ -66,9 +66,9 @@ class GuiManager {
 
         ; ===== 插入延迟 =====
         this.MainGui.AddText("x20 y235", "插入延迟：")
-        this.InsertDelaySlider := this.MainGui.AddSlider("x110 y232 w180 Range500-5000 TickInterval500", 1500)
+        this.InsertDelaySlider := this.MainGui.AddSlider("x110 y232 w180 Range150-5000 TickInterval500", 500)
         this.InsertDelaySlider.OnEvent("Change", (*) => this.OnDelaySliderChange())
-        this.InsertDelayText := this.MainGui.AddText("x300 y235 w80", "1.5 秒")
+        this.InsertDelayText := this.MainGui.AddText("x300 y235 w80", "0.5 秒")
 
         ; ===== 复选框选项 =====
         this.ClipboardProtectCheck := this.MainGui.AddCheckbox("x20 y270", "剪贴板保护（防止覆盖原有复制内容）")
