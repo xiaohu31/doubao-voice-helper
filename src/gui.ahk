@@ -8,6 +8,9 @@ class GuiManager {
     static MainGui := ""
     static IsRecording := false
     static RecordingFor := ""  ; "hold", "free", "doubao"
+    static RecordedKey := ""   ; 已录制的按键（实时更新）
+    static PeakRecordedKey := ""  ; 按键峰值状态（按下最多按键时的状态）
+    static PeakKeyCount := 0      ; 峰值按键数量
 
     ; 保存后的回调函数
     static OnSaveCallback := ""
@@ -24,7 +27,6 @@ class GuiManager {
 
     ; 高级设置控件
     static ClipboardTimeoutEdit := ""
-    static MinHoldDurationEdit := ""
 
     ; 录制按钮引用
     static HoldRecordBtn := ""
@@ -75,24 +77,19 @@ class GuiManager {
         this.AutoStartCheck := this.MainGui.AddCheckbox("x20 y295", "开机自启动")
 
         ; ===== 高级设置 =====
-        this.MainGui.AddGroupBox("x10 y325 w380 h100", "高级设置")
+        this.MainGui.AddGroupBox("x10 y325 w380 h70", "高级设置")
 
         this.MainGui.AddText("x20 y350", "剪贴板超时：")
-        this.ClipboardTimeoutEdit := this.MainGui.AddEdit("x110 y347 w80 Number", "500")
+        this.ClipboardTimeoutEdit := this.MainGui.AddEdit("x110 y347 w80 Number", "150")
         this.MainGui.AddText("x195 y350", "ms")
-        this.MainGui.AddText("x230 y350 cGray", "(推荐200-2000)")
-
-        this.MainGui.AddText("x20 y380", "最小按住时长：")
-        this.MinHoldDurationEdit := this.MainGui.AddEdit("x120 y377 w70 Number", "300")
-        this.MainGui.AddText("x195 y380", "ms")
-        this.MainGui.AddText("x230 y380 cGray", "(推荐200-500)")
+        this.MainGui.AddText("x230 y350 cGray", "(范围 100-200)")
 
         ; ===== 按钮 =====
-        this.MainGui.AddButton("x100 y440 w80 h30", "保存").OnEvent("Click", (*) => this.OnSave())
-        this.MainGui.AddButton("x200 y440 w80 h30", "取消").OnEvent("Click", (*) => this.OnCancel())
+        this.MainGui.AddButton("x100 y410 w80 h30", "保存").OnEvent("Click", (*) => this.OnSave())
+        this.MainGui.AddButton("x200 y410 w80 h30", "取消").OnEvent("Click", (*) => this.OnCancel())
 
         ; ===== 状态栏 =====
-        this.StatusText := this.MainGui.AddText("x20 y485 w360 cGreen", "状态: ● 已就绪")
+        this.StatusText := this.MainGui.AddText("x20 y455 w360 cGreen", "状态: ● 已就绪")
     }
 
     ; 显示主窗口
@@ -103,7 +100,7 @@ class GuiManager {
         ; 加载当前配置到界面
         this.LoadConfigToGui()
 
-        this.MainGui.Show("w400 h520")
+        this.MainGui.Show("w400 h490")
     }
 
     ; 隐藏主窗口
@@ -139,7 +136,6 @@ class GuiManager {
 
         ; 高级设置
         this.ClipboardTimeoutEdit.Value := Config.Get("ClipboardTimeout")
-        this.MinHoldDurationEdit.Value := Config.Get("MinHoldDuration")
     }
 
     ; 从界面保存配置
@@ -169,13 +165,10 @@ class GuiManager {
         ; 高级设置
         clipboardTimeout := this.ClipboardTimeoutEdit.Value
         if clipboardTimeout = "" || clipboardTimeout < 100
-            clipboardTimeout := 500
+            clipboardTimeout := 150
+        else if clipboardTimeout > 200
+            clipboardTimeout := 200
         Config.Set("ClipboardTimeout", Integer(clipboardTimeout))
-
-        minHoldDuration := this.MinHoldDurationEdit.Value
-        if minHoldDuration = "" || minHoldDuration < 100
-            minHoldDuration := 300
-        Config.Set("MinHoldDuration", Integer(minHoldDuration))
 
         ; 保存到文件
         Config.Save()
@@ -202,6 +195,8 @@ class GuiManager {
         result := StrReplace(result, "LCtrl", "左Ctrl")
         result := StrReplace(result, "RShift", "右Shift")
         result := StrReplace(result, "LShift", "左Shift")
+        result := StrReplace(result, "RWin", "右Win")
+        result := StrReplace(result, "LWin", "左Win")
 
         ; 修饰键（AHK格式 -> 显示格式）
         ; 注意顺序：先处理 + 因为它在AHK里表示Shift，但在显示格式里 + 是连接符
@@ -224,6 +219,10 @@ class GuiManager {
         result := StrReplace(result, "ALT+", "Alt+")
         result := StrReplace(result, "SHIFT+", "Shift+")
         result := StrReplace(result, "WIN+", "Win+")
+
+        ; 处理纯修饰键组合：移除末尾多余的 +
+        if SubStr(result, -1) = "+"
+            result := SubStr(result, 1, -1)
 
         return result
     }
@@ -249,6 +248,8 @@ class GuiManager {
         result := StrReplace(result, "左Ctrl", "《LCTRL》")
         result := StrReplace(result, "右Shift", "《RSHIFT》")
         result := StrReplace(result, "左Shift", "《LSHIFT》")
+        result := StrReplace(result, "右Win", "《RWIN》")
+        result := StrReplace(result, "左Win", "《LWIN》")
 
         ; 保护功能键 F1-F12
         Loop 12 {
@@ -268,6 +269,13 @@ class GuiManager {
         result := StrReplace(result, "Shift+", "+")
         result := StrReplace(result, "Win+", "#")
 
+        ; 处理纯修饰键组合末尾的修饰键（如 Ctrl+Alt 中的 Alt 没有 + 后缀）
+        ; 这些需要单独处理
+        result := StrReplace(result, "Ctrl", "^")
+        result := StrReplace(result, "Alt", "!")
+        result := StrReplace(result, "Shift", "+")
+        result := StrReplace(result, "Win", "#")
+
         ; 将剩余部分转为小写（主要是字母键，如 D -> d）
         result := StrLower(result)
 
@@ -281,6 +289,8 @@ class GuiManager {
         result := StrReplace(result, "《lctrl》", "LCtrl")
         result := StrReplace(result, "《rshift》", "RShift")
         result := StrReplace(result, "《lshift》", "LShift")
+        result := StrReplace(result, "《rwin》", "RWin")
+        result := StrReplace(result, "《lwin》", "LWin")
 
         ; 恢复功能键
         Loop 12 {
@@ -326,8 +336,16 @@ class GuiManager {
 
     ; 开始录制按键（支持组合键）
     static StartRecording(mode) {
+        ; 如果已经在录制，先停止
+        if this.IsRecording {
+            SetTimer(() => this.CheckKeyPress(), 0)
+        }
+
         this.IsRecording := true
         this.RecordingFor := mode
+        this.RecordedKey := ""
+        this.PeakRecordedKey := ""
+        this.PeakKeyCount := 0
 
         ; 更新按钮文字
         if mode = "hold"
@@ -343,92 +361,225 @@ class GuiManager {
         SetTimer(() => this.CheckKeyPress(), 50)
     }
 
-    ; 检测按键按下
+    ; 检测按键按下（改用"按下检测 + 松开确认"模式，使用峰值状态记录）
     static CheckKeyPress() {
         if !this.IsRecording
             return
 
-        ; 检测修饰键状态
-        ctrlDown := GetKeyState("Ctrl", "P")
-        altDown := GetKeyState("Alt", "P")
-        shiftDown := GetKeyState("Shift", "P")
-        winDown := GetKeyState("LWin", "P") || GetKeyState("RWin", "P")
+        ; 检测左右修饰键的独立状态
+        lCtrl := GetKeyState("LCtrl", "P")
+        rCtrl := GetKeyState("RCtrl", "P")
+        lAlt := GetKeyState("LAlt", "P")
+        rAlt := GetKeyState("RAlt", "P")
+        lShift := GetKeyState("LShift", "P")
+        rShift := GetKeyState("RShift", "P")
+        lWin := GetKeyState("LWin", "P")
+        rWin := GetKeyState("RWin", "P")
 
-        ; 检测普通键（排除修饰键本身）
-        mainKey := ""
+        ; 检测主键（非修饰键）
+        mainKey := this.DetectMainKey()
 
-        ; 检测鼠标按键
-        if GetKeyState("XButton1", "P")
-            mainKey := "XButton1"
-        else if GetKeyState("XButton2", "P")
-            mainKey := "XButton2"
-        else if GetKeyState("MButton", "P")
-            mainKey := "MButton"
+        ; 计算当前按下的按键数量
+        currentKeyCount := (lCtrl ? 1 : 0) + (rCtrl ? 1 : 0) + (lAlt ? 1 : 0) + (rAlt ? 1 : 0)
+                         + (lShift ? 1 : 0) + (rShift ? 1 : 0) + (lWin ? 1 : 0) + (rWin ? 1 : 0)
+                         + (mainKey != "" ? 1 : 0)
 
-        ; 检测功能键
-        if mainKey = "" {
-            Loop 12 {
-                if GetKeyState("F" . A_Index, "P") {
-                    mainKey := "F" . A_Index
-                    break
-                }
+        ; 任何键被按下时，构建当前热键
+        if currentKeyCount > 0 {
+            currentKey := this.BuildHotkey(lCtrl, rCtrl, lAlt, rAlt, lShift, rShift, lWin, rWin, mainKey)
+            this.RecordedKey := currentKey
+
+            ; 如果当前按键数量 >= 峰值，更新峰值状态和显示（用户还在添加按键）
+            if currentKeyCount >= this.PeakKeyCount {
+                this.PeakKeyCount := currentKeyCount
+                this.PeakRecordedKey := currentKey
+                this.UpdateRecordingDisplay()  ; 只在按键增加或不变时更新显示
             }
+            ; 当按键数量减少时，不更新显示，保持峰值状态的显示
         }
 
-        ; 检测字母键
-        if mainKey = "" {
-            Loop 26 {
-                letter := Chr(64 + A_Index)  ; A-Z (用于 GetKeyState 检测)
-                if GetKeyState(letter, "P") {
-                    mainKey := StrLower(letter)  ; 转为小写保存，避免 AHK 将大写解释为 Shift+字母
-                    break
-                }
-            }
-        }
-
-        ; 检测数字键
-        if mainKey = "" {
-            Loop 10 {
-                num := A_Index - 1
-                if GetKeyState(String(num), "P") {
-                    mainKey := String(num)
-                    break
-                }
-            }
-        }
-
-        ; 检测特殊键
-        if mainKey = "" {
-            specialKeys := ["Space", "Tab", "Enter", "Escape", "Backspace", "Delete", "Insert", "Home", "End", "PgUp", "PgDn", "Up", "Down", "Left", "Right", "CapsLock", "NumLock", "ScrollLock", "PrintScreen", "Pause"]
-            for key in specialKeys {
-                if GetKeyState(key, "P") {
-                    mainKey := key
-                    break
-                }
-            }
-        }
-
-        ; 检测右侧修饰键作为主键（当没有其他组合时）
-        if mainKey = "" && !ctrlDown && !altDown && !shiftDown && !winDown {
-            if GetKeyState("RAlt", "P")
-                mainKey := "RAlt"
-            else if GetKeyState("RCtrl", "P")
-                mainKey := "RCtrl"
-            else if GetKeyState("RShift", "P")
-                mainKey := "RShift"
-        }
-
-        ; 如果检测到主键，构建组合键
-        if mainKey != "" {
-            this.FinishRecording(ctrlDown, altDown, shiftDown, winDown, mainKey)
+        ; 所有键都松开时，使用峰值状态完成录制
+        if currentKeyCount = 0 && this.PeakRecordedKey != "" {
+            ; 最终更新显示为峰值状态
+            this.RecordedKey := this.PeakRecordedKey
+            this.UpdateRecordingDisplay()
+            this.FinishRecordingWithKey(this.PeakRecordedKey)
         }
     }
 
-    ; 完成录制
-    static FinishRecording(ctrlDown, altDown, shiftDown, winDown, mainKey) {
+    ; 检测主键（非修饰键）
+    static DetectMainKey() {
+        ; 检测鼠标按键
+        if GetKeyState("XButton1", "P")
+            return "XButton1"
+        if GetKeyState("XButton2", "P")
+            return "XButton2"
+        if GetKeyState("MButton", "P")
+            return "MButton"
+
+        ; 检测功能键 F1-F12
+        Loop 12 {
+            if GetKeyState("F" . A_Index, "P")
+                return "F" . A_Index
+        }
+
+        ; 检测字母键
+        Loop 26 {
+            letter := Chr(64 + A_Index)  ; A-Z
+            if GetKeyState(letter, "P")
+                return StrLower(letter)  ; 转为小写
+        }
+
+        ; 检测数字键
+        Loop 10 {
+            num := A_Index - 1
+            if GetKeyState(String(num), "P")
+                return String(num)
+        }
+
+        ; 检测特殊键
+        specialKeys := ["Space", "Tab", "Enter", "Escape", "Backspace", "Delete", "Insert", "Home", "End", "PgUp", "PgDn", "Up", "Down", "Left", "Right", "CapsLock", "NumLock", "ScrollLock", "PrintScreen", "Pause"]
+        for key in specialKeys {
+            if GetKeyState(key, "P")
+                return key
+        }
+
+        return ""
+    }
+
+    ; 根据按下的修饰键和主键构建 AHK 热键字符串
+    static BuildHotkey(lCtrl, rCtrl, lAlt, rAlt, lShift, rShift, lWin, rWin, mainKey) {
+        ; 如果有主键，使用标准修饰符格式
+        if mainKey != "" {
+            ahkKey := ""
+            if lCtrl || rCtrl
+                ahkKey .= "^"
+            if lAlt || rAlt
+                ahkKey .= "!"
+            if lShift || rShift
+                ahkKey .= "+"
+            if lWin || rWin
+                ahkKey .= "#"
+            ahkKey .= mainKey
+            return ahkKey
+        }
+
+        ; 没有主键时，处理纯修饰键情况
+        ; 优先检测单独的右侧修饰键
+        if rAlt && !lAlt && !lCtrl && !rCtrl && !lShift && !rShift && !lWin && !rWin
+            return "RAlt"
+        if rCtrl && !lCtrl && !lAlt && !rAlt && !lShift && !rShift && !lWin && !rWin
+            return "RCtrl"
+        if rShift && !lShift && !lCtrl && !rCtrl && !lAlt && !rAlt && !lWin && !rWin
+            return "RShift"
+        if rWin && !lWin && !lCtrl && !rCtrl && !lAlt && !rAlt && !lShift && !rShift
+            return "RWin"
+
+        ; 检测单独的左侧修饰键
+        if lAlt && !rAlt && !lCtrl && !rCtrl && !lShift && !rShift && !lWin && !rWin
+            return "LAlt"
+        if lCtrl && !rCtrl && !lAlt && !rAlt && !lShift && !rShift && !lWin && !rWin
+            return "LCtrl"
+        if lShift && !rShift && !lCtrl && !rCtrl && !lAlt && !rAlt && !lWin && !rWin
+            return "LShift"
+        if lWin && !rWin && !lCtrl && !rCtrl && !lAlt && !rAlt && !lShift && !rShift
+            return "LWin"
+
+        ; 纯修饰键组合（如 Ctrl+Alt, Win+Alt）
+        ahkKey := ""
+        if lCtrl || rCtrl
+            ahkKey .= "^"
+        if lAlt || rAlt
+            ahkKey .= "!"
+        if lShift || rShift
+            ahkKey .= "+"
+        if lWin || rWin
+            ahkKey .= "#"
+
+        return ahkKey
+    }
+
+    ; 实时更新录制显示
+    static UpdateRecordingDisplay() {
+        displayName := this.KeyToDisplayName(this.RecordedKey)
+
+        if this.RecordingFor = "hold"
+            this.HoldKeyEdit.Value := displayName
+        else if this.RecordingFor = "free"
+            this.FreeKeyEdit.Value := displayName
+        else if this.RecordingFor = "doubao"
+            this.DouBaoHotkeyEdit.Value := displayName
+    }
+
+    ; 完成录制（新版本，接收已构建的热键字符串）
+    static FinishRecordingWithKey(ahkKey) {
         SetTimer(() => this.CheckKeyPress(), 0)  ; 停止检测
         this.IsRecording := false
 
+        ; 恢复按钮文字
+        if this.RecordingFor = "hold"
+            this.HoldRecordBtn.Text := "录制"
+        else if this.RecordingFor = "free"
+            this.FreeRecordBtn.Text := "录制"
+        else if this.RecordingFor = "doubao"
+            this.DouBaoRecordBtn.Text := "录制"
+
+        ; 检测是否是纯修饰键组合（无法注册为热键）
+        if this.IsPureModifierCombo(ahkKey) {
+            ; 恢复原来的值
+            this.RestorePreviousKey()
+            ; 重置状态
+            this.RecordedKey := ""
+            this.PeakRecordedKey := ""
+            this.PeakKeyCount := 0
+            this.RecordingFor := ""
+            ; 显示醒目的错误提示
+            this.UpdateStatusError("纯修饰键组合无法作为触发键，请添加一个非修饰键（如字母、数字、功能键）")
+            return
+        }
+
+        ; 检查热键冲突
+        this.CheckHotkeyConflict(ahkKey)
+
+        displayName := this.KeyToDisplayName(ahkKey)
+        this.UpdateStatus("按键已设置: " . displayName)
+
+        ; 重置状态
+        this.RecordedKey := ""
+        this.PeakRecordedKey := ""
+        this.PeakKeyCount := 0
+        this.RecordingFor := ""
+    }
+
+    ; 检测是否是纯修饰键组合
+    static IsPureModifierCombo(ahkKey) {
+        ; 纯修饰键组合的特征：只有修饰符前缀，没有主键
+        ; 例如 "^!" (Ctrl+Alt), "#!" (Win+Alt)
+        ; 但 "RAlt", "RCtrl" 等单独右侧修饰键是有效的
+
+        ; 移除修饰符前缀后检查剩余部分
+        temp := ahkKey
+        temp := StrReplace(temp, "^", "")
+        temp := StrReplace(temp, "!", "")
+        temp := StrReplace(temp, "+", "")
+        temp := StrReplace(temp, "#", "")
+
+        ; 如果剩余为空，说明是纯修饰键组合
+        return temp = ""
+    }
+
+    ; 恢复录制前的按键值
+    static RestorePreviousKey() {
+        if this.RecordingFor = "hold"
+            this.HoldKeyEdit.Value := this.KeyToDisplayName(Config.Get("HoldToTalkKey"))
+        else if this.RecordingFor = "free"
+            this.FreeKeyEdit.Value := this.KeyToDisplayName(Config.Get("FreeToTalkKey"))
+        else if this.RecordingFor = "doubao"
+            this.DouBaoHotkeyEdit.Value := this.KeyToDisplayName(Config.Get("DouBaoHotkey"))
+    }
+
+    ; 完成录制（保留旧版本以兼容，但不再使用）
+    static FinishRecording(ctrlDown, altDown, shiftDown, winDown, mainKey) {
         ; 构建AHK格式的热键
         ahkKey := ""
         if ctrlDown
@@ -441,26 +592,7 @@ class GuiManager {
             ahkKey .= "#"
         ahkKey .= mainKey
 
-        ; 转换为显示名称
-        displayName := this.KeyToDisplayName(ahkKey)
-
-        ; 更新对应的输入框
-        if this.RecordingFor = "hold" {
-            this.HoldKeyEdit.Value := displayName
-            this.HoldRecordBtn.Text := "录制"
-        } else if this.RecordingFor = "free" {
-            this.FreeKeyEdit.Value := displayName
-            this.FreeRecordBtn.Text := "录制"
-        } else if this.RecordingFor = "doubao" {
-            this.DouBaoHotkeyEdit.Value := displayName
-            this.DouBaoRecordBtn.Text := "录制"
-        }
-
-        ; 检查热键冲突
-        this.CheckHotkeyConflict(ahkKey)
-
-        this.UpdateStatus("按键已设置: " . displayName)
-        this.RecordingFor := ""
+        this.FinishRecordingWithKey(ahkKey)
     }
 
     ; 检查热键冲突
@@ -484,13 +616,35 @@ class GuiManager {
             for c in conflicts
                 conflictStr .= c . ", "
             conflictStr := SubStr(conflictStr, 1, -2)
-            this.UpdateStatus("警告: 与 " . conflictStr . " 冲突!")
+            this.UpdateStatusWarning("与 " . conflictStr . " 冲突!")
         }
     }
 
-    ; 更新状态文本
-    static UpdateStatus(text) {
-        if this.StatusText != ""
+    ; 更新状态文本（支持不同类型的消息）
+    static UpdateStatus(text, type := "info") {
+        if this.StatusText != "" {
             this.StatusText.Value := "状态: " . text
+
+            ; 根据类型设置颜色
+            if type = "error" {
+                this.StatusText.SetFont("cRed Bold")
+            } else if type = "warning" {
+                this.StatusText.SetFont("cFF6600")  ; 橙色
+            } else {
+                this.StatusText.SetFont("cGreen")   ; 正常绿色
+            }
+        }
+    }
+
+    ; 显示错误状态（醒目提示）
+    static UpdateStatusError(text) {
+        this.UpdateStatus(text, "error")
+        ; 弹出消息框确保用户看到
+        MsgBox(text, "豆包语音助手 - 错误", "Icon!")
+    }
+
+    ; 显示警告状态
+    static UpdateStatusWarning(text) {
+        this.UpdateStatus(text, "warning")
     }
 }

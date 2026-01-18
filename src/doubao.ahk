@@ -49,22 +49,29 @@ class DoubaoWindow {
 
     ; 向豆包悬浮窗发送按键
     ; 会先尝试激活悬浮窗，确保按键能被接收
+    ; 返回是否成功发送（找到窗口并激活成功）
     static SendKey(key) {
         ; 尝试激活悬浮窗
-        this.ActivateVoiceWindow()
+        if !this.ActivateVoiceWindow() {
+            ; 找不到悬浮窗，不发送按键（避免按键发送到其他窗口）
+            return false
+        }
 
         ; 发送按键
         SendInput(key)
+        return true
     }
 
     ; 发送回车键（确认插入）
+    ; 返回是否成功发送
     static SendEnter() {
-        this.SendKey("{Enter}")
+        return this.SendKey("{Enter}")
     }
 
     ; 发送ESC键（取消/关闭悬浮窗）
+    ; 返回是否成功发送
     static SendEscape() {
-        this.SendKey("{Escape}")
+        return this.SendKey("{Escape}")
     }
 
     ; 检查豆包是否正在运行
@@ -75,5 +82,22 @@ class DoubaoWindow {
     ; 检查语音悬浮窗是否存在
     static IsVoiceWindowExist() {
         return this.FindVoiceWindow() != 0
+    }
+
+    ; 检查悬浮窗是否有识别内容
+    ; 返回 true 表示有内容（用户说话了）
+    ; 返回 false 表示无内容（"请说话"状态）
+    static HasVoiceContent() {
+        hwnd := this.FindVoiceWindow()
+        if !hwnd
+            return false
+
+        WinGetPos(&x, &y, &w, &h, hwnd)
+
+        ; 高度判断：
+        ; ~200px = "请说话"状态（无内容）
+        ; ~243px+ = 有识别内容
+        ; 阈值设为 220px
+        return h > 220
     }
 }

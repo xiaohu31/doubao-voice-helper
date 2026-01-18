@@ -23,6 +23,10 @@ class VoiceController {
     static IsProcessing := false
     static IsEnabled := true  ; 是否启用
 
+    ; 防重复提示
+    static LastTipTime := 0
+    static TipDebounceInterval := 2000  ; 2秒内不重复相同提示
+
     ; 初始化
     static Init() {
         ; 加载配置
@@ -32,8 +36,7 @@ class VoiceController {
         HotkeyManager.SetCallbacks(
             (*) => this.OnVoiceStart(),
             (*) => this.OnHoldEnd(),
-            (isStart) => this.OnFreeToggle(isStart),
-            (*) => this.OnHoldCancel()  ; 取消回调
+            (isStart) => this.OnFreeToggle(isStart)
         )
 
         ; 设置GUI保存回调
@@ -163,6 +166,7 @@ class VoiceController {
 
     ; 语音开始（按着说模式按下 或 自由说模式开始）
     static OnVoiceStart() {
+        ; 如果已经在处理中或已禁用，忽略本次触发
         if this.IsProcessing || !this.IsEnabled
             return
 
@@ -185,29 +189,32 @@ class VoiceController {
         this.DoInsertProcess()
     }
 
-    ; 按着说模式取消（按住时间太短）
-    static OnHoldCancel() {
-        if !this.IsProcessing
-            return
-
-        ; 等待豆包悬浮窗完全显示（避免ESC发送过快导致无效）
-        Sleep(200)
-
-        ; 激活悬浮窗后发送ESC退出（解决失焦问题）
-        DoubaoWindow.SendEscape()
-
-        ; 重置状态（不需要恢复剪贴板，因为还没备份）
-        this.IsProcessing := false
-        HotkeyManager.ResetState()
-    }
-
     ; 自由说模式切换
     static OnFreeToggle(isStart) {
         if isStart {
             ; 开始说话
             this.OnVoiceStart()
+
+            ; 延迟检测悬浮窗是否弹出（1秒后）
+            SetTimer(() => this.CheckVoiceWindowAfterStart(), -1000)
         } else {
-            ; 结束说话，执行插入
+            ; 结束说话前，先检查悬浮窗是否还存在
+            if !DoubaoWindow.IsVoiceWindowExist() {
+                ; 悬浮窗不存在，说明用户手动关闭了
+                ; 重置状态，不执行插入
+                this.IsProcessing := false
+                HotkeyManager.ResetState()
+
+                ; 防重复提示：2秒内不重复显示相同提示
+                currentTime := A_TickCount
+                if (currentTime - this.LastTipTime) >= this.TipDebounceInterval {
+                    this.ShowTrayTip("提示", "豆包悬浮窗已关闭")
+                    this.LastTipTime := currentTime
+                }
+                return
+            }
+
+            ; 悬浮窗存在，正常执行插入
             if this.IsProcessing
                 this.DoInsertProcess()
         }
@@ -215,6 +222,26 @@ class VoiceController {
 
     ; 执行插入流程
     static DoInsertProcess() {
+        ; 0. 检查豆包是否在运行
+        if !DoubaoWindow.IsRunning() {
+            this.IsProcessing := false
+            HotkeyManager.ResetState()
+            this.ShowTrayTip("错误", "豆包未运行，无法完成语音输入")
+            return
+        }
+
+        ; 0.5 提前检测：如果悬浮窗无内容，直接关闭（优化自由说模式体验）
+        ; 检查悬浮窗是否存在且无识别内容
+        if DoubaoWindow.IsVoiceWindowExist() && !DoubaoWindow.HasVoiceContent() {
+            ; 悬浮窗存在但无内容，说明用户没说话
+            ; 直接发送 ESC 关闭，跳过等待流程
+            DoubaoWindow.SendEscape()
+            this.IsProcessing := false
+            HotkeyManager.ResetState()
+            ; 静默处理，不显示提示
+            return
+        }
+
         ; 1. 等待识别延迟
         delay := Config.Get("InsertDelay")
         Sleep(delay)
@@ -228,7 +255,9 @@ class VoiceController {
         ; 4. 轮询等待剪贴板变化（带超时）
         timeout := Config.Get("ClipboardTimeout")
         if timeout = "" || timeout < 100
-            timeout := 500  ; 默认500ms
+            timeout := 150  ; 默认150ms
+        else if timeout > 200
+            timeout := 200  ; 最大200ms
 
         startTime := A_TickCount
         clipboardChanged := false
@@ -265,6 +294,21 @@ class VoiceController {
         ; 重置状态
         this.IsProcessing := false
         HotkeyManager.ResetState()
+    }
+
+    ; 检查悬浮窗是否弹出（自由说模式启动后1秒检测）
+    static CheckVoiceWindowAfterStart() {
+        ; 只在自由说模式且正在处理时检查
+        if !HotkeyManager.IsFreeMode || !this.IsProcessing
+            return
+
+        ; 检查悬浮窗是否存在
+        if !DoubaoWindow.IsVoiceWindowExist() {
+            ; 悬浮窗不存在，重置状态
+            this.IsProcessing := false
+            HotkeyManager.ResetState()
+            this.ShowTrayTip("错误", "豆包悬浮窗未弹出，请检查豆包是否正常运行")
+        }
     }
 
     ; 显示托盘提示

@@ -11,14 +11,14 @@ class HotkeyManager {
     static IsHoldMode := false    ; 按着说模式激活中
     static IsFreeMode := false    ; 自由说模式激活中
 
-    ; 按下时间戳（用于检测最小按住时长）
-    static HoldStartTime := 0
+    ; 防抖状态
+    static LastFreeKeyPressTime := 0  ; 上次自由说按键触发时间
+    static FreeKeyDebounceInterval := 500  ; 防抖间隔（毫秒）
 
     ; 回调函数
     static OnHoldStart := ""
     static OnHoldEnd := ""
     static OnFreeToggle := ""
-    static OnHoldCancel := ""  ; 取消回调（快速按一下时）
 
     ; 初始化热键
     static Init(holdKey, freeKey) {
@@ -131,8 +131,12 @@ class HotkeyManager {
         if this.IsHoldMode  ; 防止重复触发
             return
 
+        ; 检查是否正在处理中（防止在等待期间重复触发）
+        ; 需要通过全局访问 VoiceController，但为了避免循环依赖，
+        ; 我们通过回调函数来检查
+        ; 暂时先允许触发，由 OnHoldStart 内部检查
+
         this.IsHoldMode := true
-        this.HoldStartTime := A_TickCount  ; 记录按下时间
         if this.OnHoldStart is Func
             this.OnHoldStart.Call()
     }
@@ -144,27 +148,22 @@ class HotkeyManager {
 
         this.IsHoldMode := false
 
-        ; 计算按住时长
-        holdDuration := A_TickCount - this.HoldStartTime
-        minHoldDuration := Config.Get("MinHoldDuration")
-        if minHoldDuration = ""
-            minHoldDuration := 300  ; 默认300ms
-
-        if holdDuration < minHoldDuration {
-            ; 按住时间太短，取消操作
-            if this.OnHoldCancel is Func
-                this.OnHoldCancel.Call()
-        } else {
-            ; 正常松开，执行插入
-            if this.OnHoldEnd is Func
-                this.OnHoldEnd.Call()
-        }
+        ; 直接执行插入流程（提前检测会处理无内容的情况）
+        if this.OnHoldEnd is Func
+            this.OnHoldEnd.Call()
     }
 
     ; 处理"自由说"按键
     static HandleFreeKeyPress() {
         if this.IsHoldMode  ; 如果按着说模式正在进行，忽略
             return
+
+        ; 防抖检查：距离上次触发时间必须 >= 500ms
+        currentTime := A_TickCount
+        if (currentTime - this.LastFreeKeyPressTime) < this.FreeKeyDebounceInterval
+            return
+
+        this.LastFreeKeyPressTime := currentTime
 
         this.IsFreeMode := !this.IsFreeMode
         if this.OnFreeToggle is Func
@@ -194,10 +193,9 @@ class HotkeyManager {
     }
 
     ; 设置回调函数
-    static SetCallbacks(onHoldStart, onHoldEnd, onFreeToggle, onHoldCancel := "") {
+    static SetCallbacks(onHoldStart, onHoldEnd, onFreeToggle) {
         this.OnHoldStart := onHoldStart
         this.OnHoldEnd := onHoldEnd
         this.OnFreeToggle := onFreeToggle
-        this.OnHoldCancel := onHoldCancel
     }
 }
