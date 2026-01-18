@@ -21,8 +21,32 @@ class Config {
     ; 当前配置
     static Current := Map()
 
-    ; 配置文件路径
-    static FilePath := A_ScriptDir . "\..\config.ini"
+    ; 配置文件路径（优先使用外部文件，不存在则使用用户目录）
+    static FilePath := ""
+
+    ; 获取配置文件路径
+    static GetFilePath() {
+        if this.FilePath != ""
+            return this.FilePath
+
+        ; 优先使用程序同目录的 config.ini
+        localConfig := A_ScriptDir . "\..\config.ini"
+        if FileExist(localConfig) {
+            this.FilePath := localConfig
+            return this.FilePath
+        }
+
+        ; 如果不存在，使用用户目录（支持单文件运行）
+        userConfig := A_AppData . "\DouBaoVoiceHelper\config.ini"
+        this.FilePath := userConfig
+
+        ; 确保目录存在
+        userDir := A_AppData . "\DouBaoVoiceHelper"
+        if !FileExist(userDir)
+            DirCreate(userDir)
+
+        return this.FilePath
+    }
 
     ; 初始化配置
     static Init() {
@@ -37,23 +61,25 @@ class Config {
 
     ; 从INI文件加载配置
     static Load() {
-        if !FileExist(this.FilePath)
+        filePath := this.GetFilePath()
+        if !FileExist(filePath)
             return false
 
         try {
+            filePath := this.GetFilePath()
             ; General 部分
-            this.Current["HoldToTalkKey"] := IniRead(this.FilePath, "General", "HoldToTalkKey", this.Default["HoldToTalkKey"])
-            this.Current["FreeToTalkKey"] := IniRead(this.FilePath, "General", "FreeToTalkKey", this.Default["FreeToTalkKey"])
-            this.Current["DouBaoHotkey"] := IniRead(this.FilePath, "General", "DouBaoHotkey", this.Default["DouBaoHotkey"])
-            this.Current["InsertDelay"] := Integer(IniRead(this.FilePath, "General", "InsertDelay", this.Default["InsertDelay"]))
-            this.Current["ClipboardProtect"] := Integer(IniRead(this.FilePath, "General", "ClipboardProtect", this.Default["ClipboardProtect"]))
-            this.Current["AutoStart"] := Integer(IniRead(this.FilePath, "General", "AutoStart", this.Default["AutoStart"]))
+            this.Current["HoldToTalkKey"] := IniRead(filePath, "General", "HoldToTalkKey", this.Default["HoldToTalkKey"])
+            this.Current["FreeToTalkKey"] := IniRead(filePath, "General", "FreeToTalkKey", this.Default["FreeToTalkKey"])
+            this.Current["DouBaoHotkey"] := IniRead(filePath, "General", "DouBaoHotkey", this.Default["DouBaoHotkey"])
+            this.Current["InsertDelay"] := Integer(IniRead(filePath, "General", "InsertDelay", this.Default["InsertDelay"]))
+            this.Current["ClipboardProtect"] := Integer(IniRead(filePath, "General", "ClipboardProtect", this.Default["ClipboardProtect"]))
+            this.Current["AutoStart"] := Integer(IniRead(filePath, "General", "AutoStart", this.Default["AutoStart"]))
 
             ; Advanced 部分
-            this.Current["FocusRecovery"] := Integer(IniRead(this.FilePath, "Advanced", "FocusRecovery", this.Default["FocusRecovery"]))
-            this.Current["ShowTrayTip"] := Integer(IniRead(this.FilePath, "Advanced", "ShowTrayTip", this.Default["ShowTrayTip"]))
-            this.Current["ClipboardTimeout"] := Integer(IniRead(this.FilePath, "Advanced", "ClipboardTimeout", this.Default["ClipboardTimeout"]))
-            this.Current["MinHoldDuration"] := Integer(IniRead(this.FilePath, "Advanced", "MinHoldDuration", this.Default["MinHoldDuration"]))
+            this.Current["FocusRecovery"] := Integer(IniRead(filePath, "Advanced", "FocusRecovery", this.Default["FocusRecovery"]))
+            this.Current["ShowTrayTip"] := Integer(IniRead(filePath, "Advanced", "ShowTrayTip", this.Default["ShowTrayTip"]))
+            this.Current["ClipboardTimeout"] := Integer(IniRead(filePath, "Advanced", "ClipboardTimeout", this.Default["ClipboardTimeout"]))
+            this.Current["MinHoldDuration"] := Integer(IniRead(filePath, "Advanced", "MinHoldDuration", this.Default["MinHoldDuration"]))
 
             return true
         } catch as e {
@@ -64,19 +90,20 @@ class Config {
     ; 保存配置到INI文件
     static Save() {
         try {
+            filePath := this.GetFilePath()
             ; General 部分
-            IniWrite(this.Current["HoldToTalkKey"], this.FilePath, "General", "HoldToTalkKey")
-            IniWrite(this.Current["FreeToTalkKey"], this.FilePath, "General", "FreeToTalkKey")
-            IniWrite(this.Current["DouBaoHotkey"], this.FilePath, "General", "DouBaoHotkey")
-            IniWrite(this.Current["InsertDelay"], this.FilePath, "General", "InsertDelay")
-            IniWrite(this.Current["ClipboardProtect"], this.FilePath, "General", "ClipboardProtect")
-            IniWrite(this.Current["AutoStart"], this.FilePath, "General", "AutoStart")
+            IniWrite(this.Current["HoldToTalkKey"], filePath, "General", "HoldToTalkKey")
+            IniWrite(this.Current["FreeToTalkKey"], filePath, "General", "FreeToTalkKey")
+            IniWrite(this.Current["DouBaoHotkey"], filePath, "General", "DouBaoHotkey")
+            IniWrite(this.Current["InsertDelay"], filePath, "General", "InsertDelay")
+            IniWrite(this.Current["ClipboardProtect"], filePath, "General", "ClipboardProtect")
+            IniWrite(this.Current["AutoStart"], filePath, "General", "AutoStart")
 
             ; Advanced 部分
-            IniWrite(this.Current["FocusRecovery"], this.FilePath, "Advanced", "FocusRecovery")
-            IniWrite(this.Current["ShowTrayTip"], this.FilePath, "Advanced", "ShowTrayTip")
-            IniWrite(this.Current["ClipboardTimeout"], this.FilePath, "Advanced", "ClipboardTimeout")
-            IniWrite(this.Current["MinHoldDuration"], this.FilePath, "Advanced", "MinHoldDuration")
+            IniWrite(this.Current["FocusRecovery"], filePath, "Advanced", "FocusRecovery")
+            IniWrite(this.Current["ShowTrayTip"], filePath, "Advanced", "ShowTrayTip")
+            IniWrite(this.Current["ClipboardTimeout"], filePath, "Advanced", "ClipboardTimeout")
+            IniWrite(this.Current["MinHoldDuration"], filePath, "Advanced", "MinHoldDuration")
 
             return true
         } catch as e {

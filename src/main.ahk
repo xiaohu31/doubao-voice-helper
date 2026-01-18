@@ -77,20 +77,20 @@ class VoiceController {
     ; 设置托盘图标（根据状态切换）
     ; state: "normal" | "disabled"
     static SetTrayIcon(state := "normal") {
-        ; 优先使用自定义图标
+        ; 优先使用自定义图标，不存在则使用系统图标
         switch state {
             case "normal":
                 iconPath := A_ScriptDir . "\..\assets\icon.ico"
                 if FileExist(iconPath)
                     TraySetIcon(iconPath)
                 else
-                    TraySetIcon("imageres.dll", 109)  ; 麦克风图标（高清）
+                    TraySetIcon("imageres.dll", 109)  ; 麦克风图标（系统内置）
             case "disabled":
                 iconPath := A_ScriptDir . "\..\assets\icon-disabled.ico"
                 if FileExist(iconPath)
                     TraySetIcon(iconPath)
                 else
-                    TraySetIcon("imageres.dll", 85)  ; 灰色静音图标
+                    TraySetIcon("imageres.dll", 85)  ; 灰色静音图标（系统内置）
         }
     }
 
