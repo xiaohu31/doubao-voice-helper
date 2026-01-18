@@ -87,14 +87,16 @@ class VoiceController {
                 iconPath := A_ScriptDir . "\..\assets\icon.ico"
                 if FileExist(iconPath)
                     TraySetIcon(iconPath)
+                else if A_IsCompiled
+                    TraySetIcon(A_ScriptFullPath)  ; 使用编译时嵌入的图标
                 else
-                    TraySetIcon("imageres.dll", 109)  ; 麦克风图标（系统内置）
+                    TraySetIcon("shell32.dll", 169)  ; 麦克风图标
             case "disabled":
                 iconPath := A_ScriptDir . "\..\assets\icon-disabled.ico"
                 if FileExist(iconPath)
                     TraySetIcon(iconPath)
                 else
-                    TraySetIcon("imageres.dll", 85)  ; 灰色静音图标（系统内置）
+                    TraySetIcon("shell32.dll", 132)  ; 灰色图标
         }
     }
 
