@@ -44,10 +44,21 @@ class HotkeyManager {
 
     ; 注册"按着说"热键（需要按下和松开两个事件）
     static RegisterHoldHotkey(key) {
-        ; 直接使用传入的key，它已经是AHK格式（如 ^d, RAlt, XButton1 等）
+        ; 直接使用传入的key，它已经是AHK格式（如 ^d, RAlt, XButton1, LAlt & RWin 等）
         keyName := key
 
         try {
+            ; 检测是否是 & 组合键格式
+            if InStr(key, " & ") {
+                ; & 组合键需要特殊处理
+                return this.RegisterAmpersandHoldHotkey(key)
+            }
+
+            ; 检测是否是单独修饰键
+            if this.IsSingleModifierKey(key) {
+                return this.RegisterModifierHoldHotkey(key)
+            }
+
             ; 对于纯鼠标按键（无修饰键），使用 ~ 前缀
             prefix := this.IsPureMouseKey(key) ? "~" : ""
 
@@ -58,9 +69,65 @@ class HotkeyManager {
 
             this.RegisteredHotkeys["hold"] := keyName
             this.RegisteredHotkeys["hold_prefix"] := prefix
+            this.RegisteredHotkeys["hold_type"] := "normal"
             return true
         } catch as e {
             ; 热键注册失败，输出错误信息
+            return false
+        }
+    }
+
+    ; 注册单独修饰键作为"按着说"热键
+    static RegisterModifierHoldHotkey(key) {
+        try {
+            ; 单独修饰键（如 RAlt, LWin）可以直接用键名注册
+            ; 按下事件
+            Hotkey(key, (*) => this.HandleHoldKeyDown())
+            ; 松开事件
+            Hotkey(key . " Up", (*) => this.HandleHoldKeyUp())
+
+            this.RegisteredHotkeys["hold"] := key
+            this.RegisteredHotkeys["hold_prefix"] := ""
+            this.RegisteredHotkeys["hold_type"] := "modifier"
+            return true
+        } catch as e {
+            return false
+        }
+    }
+
+    ; 注册 & 组合键作为"按着说"热键
+    static RegisterAmpersandHoldHotkey(key) {
+        ; 解析 & 组合键（如 "LAlt & RWin"）
+        parts := StrSplit(key, " & ")
+        if parts.Length != 2
+            return false
+
+        prefixKey := parts[1]
+        suffixKey := parts[2]
+
+        try {
+            ; 注册组合键（按下 suffix 时触发）
+            Hotkey(key, (*) => this.HandleHoldKeyDown())
+
+            ; 注册 suffix 的 Up 事件（当 prefix 按下时松开 suffix 触发）
+            ; 对于 & 组合键，Up 事件格式是 "prefix & suffix Up"
+            Hotkey(prefixKey . " & " . suffixKey . " Up", (*) => this.HandleHoldKeyUp())
+
+            ; 为 prefix 键添加一个空热键，防止它触发原有功能
+            ; 但只有单独按下 prefix 时才不触发，与 suffix 组合时正常工作
+            try {
+                Hotkey(prefixKey, (*) => {})  ; 空回调，阻止 prefix 键的默认行为
+            } catch {
+                ; 如果已注册，忽略错误
+            }
+
+            this.RegisteredHotkeys["hold"] := key
+            this.RegisteredHotkeys["hold_prefix"] := ""
+            this.RegisteredHotkeys["hold_type"] := "ampersand"
+            this.RegisteredHotkeys["hold_prefixKey"] := prefixKey
+            this.RegisteredHotkeys["hold_suffixKey"] := suffixKey
+            return true
+        } catch as e {
             return false
         }
     }
@@ -70,11 +137,70 @@ class HotkeyManager {
         keyName := key
 
         try {
+            ; 检测是否是 & 组合键格式
+            if InStr(key, " & ") {
+                return this.RegisterAmpersandFreeHotkey(key)
+            }
+
+            ; 检测是否是单独修饰键
+            if this.IsSingleModifierKey(key) {
+                return this.RegisterModifierFreeHotkey(key)
+            }
+
             prefix := this.IsPureMouseKey(key) ? "~" : ""
 
             Hotkey(prefix . keyName, (*) => this.HandleFreeKeyPress())
             this.RegisteredHotkeys["free"] := keyName
             this.RegisteredHotkeys["free_prefix"] := prefix
+            this.RegisteredHotkeys["free_type"] := "normal"
+            return true
+        } catch as e {
+            return false
+        }
+    }
+
+    ; 注册单独修饰键作为"自由说"热键
+    static RegisterModifierFreeHotkey(key) {
+        try {
+            ; 单独修饰键，使用 Up 事件来触发（松开时触发）
+            ; 这样可以避免与其他组合键冲突
+            Hotkey(key . " Up", (*) => this.HandleFreeKeyPress())
+
+            this.RegisteredHotkeys["free"] := key
+            this.RegisteredHotkeys["free_prefix"] := ""
+            this.RegisteredHotkeys["free_type"] := "modifier"
+            return true
+        } catch as e {
+            return false
+        }
+    }
+
+    ; 注册 & 组合键作为"自由说"热键
+    static RegisterAmpersandFreeHotkey(key) {
+        ; 解析 & 组合键
+        parts := StrSplit(key, " & ")
+        if parts.Length != 2
+            return false
+
+        prefixKey := parts[1]
+        suffixKey := parts[2]
+
+        try {
+            ; 注册组合键
+            Hotkey(key, (*) => this.HandleFreeKeyPress())
+
+            ; 为 prefix 键添加一个空热键
+            try {
+                Hotkey(prefixKey, (*) => {})
+            } catch {
+                ; 如果已注册，忽略错误
+            }
+
+            this.RegisteredHotkeys["free"] := key
+            this.RegisteredHotkeys["free_prefix"] := ""
+            this.RegisteredHotkeys["free_type"] := "ampersand"
+            this.RegisteredHotkeys["free_prefixKey"] := prefixKey
+            this.RegisteredHotkeys["free_suffixKey"] := suffixKey
             return true
         } catch as e {
             return false
@@ -87,22 +213,36 @@ class HotkeyManager {
         if this.RegisteredHotkeys.Has("hold") {
             key := this.RegisteredHotkeys["hold"]
             prefix := this.RegisteredHotkeys.Has("hold_prefix") ? this.RegisteredHotkeys["hold_prefix"] : ""
+            keyType := this.RegisteredHotkeys.Has("hold_type") ? this.RegisteredHotkeys["hold_type"] : "normal"
 
-            ; 注销按下事件
-            try {
-                Hotkey(prefix . key, "Off")
-            } catch as e {
-                ; 只忽略 "Nonexistent" 错误，其他错误需要处理
-                if !InStr(e.Message, "Nonexistent")
-                    throw e
-            }
+            if keyType = "ampersand" {
+                ; & 组合键的注销
+                prefixKey := this.RegisteredHotkeys.Has("hold_prefixKey") ? this.RegisteredHotkeys["hold_prefixKey"] : ""
+                suffixKey := this.RegisteredHotkeys.Has("hold_suffixKey") ? this.RegisteredHotkeys["hold_suffixKey"] : ""
 
-            ; 注销松开事件
-            try {
-                Hotkey(prefix . key . " Up", "Off")
-            } catch as e {
-                if !InStr(e.Message, "Nonexistent")
-                    throw e
+                try {
+                    Hotkey(key, "Off")
+                } catch {
+                }
+                try {
+                    Hotkey(prefixKey . " & " . suffixKey . " Up", "Off")
+                } catch {
+                }
+            } else {
+                ; 普通热键或修饰键热键的注销
+                try {
+                    Hotkey(prefix . key, "Off")
+                } catch as e {
+                    if !InStr(e.Message, "Nonexistent")
+                        throw e
+                }
+
+                try {
+                    Hotkey(prefix . key . " Up", "Off")
+                } catch as e {
+                    if !InStr(e.Message, "Nonexistent")
+                        throw e
+                }
             }
         }
 
@@ -110,12 +250,25 @@ class HotkeyManager {
         if this.RegisteredHotkeys.Has("free") {
             key := this.RegisteredHotkeys["free"]
             prefix := this.RegisteredHotkeys.Has("free_prefix") ? this.RegisteredHotkeys["free_prefix"] : ""
+            keyType := this.RegisteredHotkeys.Has("free_type") ? this.RegisteredHotkeys["free_type"] : "normal"
 
-            try {
-                Hotkey(prefix . key, "Off")
-            } catch as e {
-                if !InStr(e.Message, "Nonexistent")
-                    throw e
+            if keyType = "ampersand" {
+                try {
+                    Hotkey(key, "Off")
+                } catch {
+                }
+            } else if keyType = "modifier" {
+                try {
+                    Hotkey(key . " Up", "Off")
+                } catch {
+                }
+            } else {
+                try {
+                    Hotkey(prefix . key, "Off")
+                } catch as e {
+                    if !InStr(e.Message, "Nonexistent")
+                        throw e
+                }
             }
         }
 
@@ -186,6 +339,17 @@ class HotkeyManager {
             return false
 
         for mk in mouseKeys {
+            if key = mk
+                return true
+        }
+        return false
+    }
+
+    ; 检查是否是单独修饰键
+    static IsSingleModifierKey(key) {
+        static modifierKeys := ["RAlt", "LAlt", "RCtrl", "LCtrl", "RShift", "LShift", "RWin", "LWin"]
+
+        for mk in modifierKeys {
             if key = mk
                 return true
         }

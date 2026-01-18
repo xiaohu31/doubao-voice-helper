@@ -164,7 +164,7 @@ class VoiceController {
 • 自由说 - 点击开始，再点击结束
 • 剪贴板保护 - 不覆盖原有内容
 
-项目地址：https://github.com/xxx/DouBaoVoiceHelper
+项目地址：https://github.com/xiaohu31/doubao-voice-helper
 开源协议：MIT License
         )"
         MsgBox(aboutText, "关于 - 豆包语音助手", 64)

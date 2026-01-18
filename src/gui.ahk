@@ -175,13 +175,18 @@ class GuiManager {
     }
 
     ; AHK格式转显示名称
-    ; AHK格式: ^d (Ctrl+D), !d (Alt+D), +d (Shift+D), ^!d (Ctrl+Alt+D)
-    ; 显示格式: Ctrl+D, Alt+D, Shift+D, Ctrl+Alt+D
+    ; AHK格式: ^d (Ctrl+D), !d (Alt+D), +d (Shift+D), ^!d (Ctrl+Alt+D), LAlt & RWin
+    ; 显示格式: Ctrl+D, Alt+D, Shift+D, Ctrl+Alt+D, 左Alt+右Win
     static KeyToDisplayName(ahkKey) {
         if ahkKey = ""
             return ""
 
         result := ahkKey
+
+        ; 处理 & 组合键格式（如 LAlt & RWin -> 左Alt+右Win）
+        if InStr(result, " & ") {
+            result := StrReplace(result, " & ", "《AND》")
+        }
 
         ; 鼠标按键
         result := StrReplace(result, "XButton1", "鼠标侧键1")
@@ -220,6 +225,19 @@ class GuiManager {
         result := StrReplace(result, "SHIFT+", "Shift+")
         result := StrReplace(result, "WIN+", "Win+")
 
+        ; 恢复左右修饰键的大小写
+        result := StrReplace(result, "右ALT", "右Alt")
+        result := StrReplace(result, "左ALT", "左Alt")
+        result := StrReplace(result, "右CTRL", "右Ctrl")
+        result := StrReplace(result, "左CTRL", "左Ctrl")
+        result := StrReplace(result, "右SHIFT", "右Shift")
+        result := StrReplace(result, "左SHIFT", "左Shift")
+        result := StrReplace(result, "右WIN", "右Win")
+        result := StrReplace(result, "左WIN", "左Win")
+
+        ; 恢复 & 组合键的连接符
+        result := StrReplace(result, "《AND》", "+")
+
         ; 处理纯修饰键组合：移除末尾多余的 +
         if SubStr(result, -1) = "+"
             result := SubStr(result, 1, -1)
@@ -228,13 +246,19 @@ class GuiManager {
     }
 
     ; 显示名称转AHK格式
-    ; 显示格式: Ctrl+D, Alt+D, Shift+D, Ctrl+Alt+D
-    ; AHK格式: ^d (Ctrl+D), !d (Alt+D), +d (Shift+D), ^!d (Ctrl+Alt+D)
+    ; 显示格式: Ctrl+D, Alt+D, Shift+D, Ctrl+Alt+D, 左Alt+右Win
+    ; AHK格式: ^d (Ctrl+D), !d (Alt+D), +d (Shift+D), ^!d (Ctrl+Alt+D), LAlt & RWin
     static DisplayNameToKey(displayName) {
         if displayName = ""
             return ""
 
         result := displayName
+
+        ; 首先检测是否是纯左右修饰键组合（如 "左Alt+右Win", "左Ctrl+右Shift"）
+        ; 这些需要转换成 & 格式
+        pureModifierResult := this.TryConvertPureModifierCombo(result)
+        if pureModifierResult != ""
+            return pureModifierResult
 
         ; 鼠标按键（先用占位符保护，避免被后面的小写转换影响）
         result := StrReplace(result, "鼠标侧键1", "《XBUTTON1》")
@@ -269,13 +293,6 @@ class GuiManager {
         result := StrReplace(result, "Shift+", "+")
         result := StrReplace(result, "Win+", "#")
 
-        ; 处理纯修饰键组合末尾的修饰键（如 Ctrl+Alt 中的 Alt 没有 + 后缀）
-        ; 这些需要单独处理
-        result := StrReplace(result, "Ctrl", "^")
-        result := StrReplace(result, "Alt", "!")
-        result := StrReplace(result, "Shift", "+")
-        result := StrReplace(result, "Win", "#")
-
         ; 将剩余部分转为小写（主要是字母键，如 D -> d）
         result := StrLower(result)
 
@@ -303,6 +320,40 @@ class GuiManager {
         }
 
         return result
+    }
+
+    ; 尝试将纯左右修饰键组合转换为 & 格式
+    ; 返回空字符串表示不是纯修饰键组合
+    static TryConvertPureModifierCombo(displayName) {
+        ; 左右修饰键的映射表（显示名称 -> AHK 键名）
+        static modifierMap := Map(
+            "右Alt", "RAlt",
+            "左Alt", "LAlt",
+            "右Ctrl", "RCtrl",
+            "左Ctrl", "LCtrl",
+            "右Shift", "RShift",
+            "左Shift", "LShift",
+            "右Win", "RWin",
+            "左Win", "LWin"
+        )
+
+        ; 检测单独的修饰键
+        if modifierMap.Has(displayName)
+            return modifierMap[displayName]
+
+        ; 检测两个修饰键的组合（用 + 连接）
+        ; 例如 "左Alt+右Win" -> "LAlt & RWin"
+        for display1, ahk1 in modifierMap {
+            for display2, ahk2 in modifierMap {
+                if display1 != display2 {
+                    combo := display1 . "+" . display2
+                    if displayName = combo
+                        return ahk1 . " & " . ahk2
+                }
+            }
+        }
+
+        return ""
     }
 
     ; 延迟滑块变化
@@ -465,38 +516,34 @@ class GuiManager {
         }
 
         ; 没有主键时，处理纯修饰键情况
-        ; 优先检测单独的右侧修饰键
-        if rAlt && !lAlt && !lCtrl && !rCtrl && !lShift && !rShift && !lWin && !rWin
-            return "RAlt"
-        if rCtrl && !lCtrl && !lAlt && !rAlt && !lShift && !rShift && !lWin && !rWin
-            return "RCtrl"
-        if rShift && !lShift && !lCtrl && !rCtrl && !lAlt && !rAlt && !lWin && !rWin
-            return "RShift"
-        if rWin && !lWin && !lCtrl && !rCtrl && !lAlt && !rAlt && !lShift && !rShift
-            return "RWin"
+        ; 收集所有按下的修饰键
+        modifiers := []
+        if lCtrl
+            modifiers.Push("LCtrl")
+        if rCtrl
+            modifiers.Push("RCtrl")
+        if lAlt
+            modifiers.Push("LAlt")
+        if rAlt
+            modifiers.Push("RAlt")
+        if lShift
+            modifiers.Push("LShift")
+        if rShift
+            modifiers.Push("RShift")
+        if lWin
+            modifiers.Push("LWin")
+        if rWin
+            modifiers.Push("RWin")
 
-        ; 检测单独的左侧修饰键
-        if lAlt && !rAlt && !lCtrl && !rCtrl && !lShift && !rShift && !lWin && !rWin
-            return "LAlt"
-        if lCtrl && !rCtrl && !lAlt && !rAlt && !lShift && !rShift && !lWin && !rWin
-            return "LCtrl"
-        if lShift && !rShift && !lCtrl && !rCtrl && !lAlt && !rAlt && !lWin && !rWin
-            return "LShift"
-        if lWin && !rWin && !lCtrl && !rCtrl && !lAlt && !rAlt && !lShift && !rShift
-            return "LWin"
+        ; 单独一个修饰键，直接返回键名
+        if modifiers.Length = 1
+            return modifiers[1]
 
-        ; 纯修饰键组合（如 Ctrl+Alt, Win+Alt）
-        ahkKey := ""
-        if lCtrl || rCtrl
-            ahkKey .= "^"
-        if lAlt || rAlt
-            ahkKey .= "!"
-        if lShift || rShift
-            ahkKey .= "+"
-        if lWin || rWin
-            ahkKey .= "#"
+        ; 多个修饰键组合，使用 & 语法（如 LAlt & RWin）
+        if modifiers.Length >= 2
+            return modifiers[1] . " & " . modifiers[2]
 
-        return ahkKey
+        return ""
     }
 
     ; 实时更新录制显示
@@ -551,11 +598,23 @@ class GuiManager {
         this.RecordingFor := ""
     }
 
-    ; 检测是否是纯修饰键组合
+    ; 检测是否是无法注册的热键格式
+    ; 现在支持 & 格式的纯修饰键组合，所以只有空字符串是无效的
     static IsPureModifierCombo(ahkKey) {
-        ; 纯修饰键组合的特征：只有修饰符前缀，没有主键
-        ; 例如 "^!" (Ctrl+Alt), "#!" (Win+Alt)
-        ; 但 "RAlt", "RCtrl" 等单独右侧修饰键是有效的
+        ; 空字符串无效
+        if ahkKey = ""
+            return true
+
+        ; 如果包含 & 符号，说明是有效的组合键格式
+        if InStr(ahkKey, " & ")
+            return false
+
+        ; 单独的修饰键名是有效的（RAlt, LCtrl 等）
+        singleModifiers := ["RAlt", "LAlt", "RCtrl", "LCtrl", "RShift", "LShift", "RWin", "LWin"]
+        for mod in singleModifiers {
+            if ahkKey = mod
+                return false
+        }
 
         ; 移除修饰符前缀后检查剩余部分
         temp := ahkKey
@@ -564,7 +623,7 @@ class GuiManager {
         temp := StrReplace(temp, "+", "")
         temp := StrReplace(temp, "#", "")
 
-        ; 如果剩余为空，说明是纯修饰键组合
+        ; 如果剩余为空，说明是旧格式的纯修饰键组合（不应该出现了）
         return temp = ""
     }
 
