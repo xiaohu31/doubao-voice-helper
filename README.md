@@ -5,6 +5,10 @@
 [![GitHub release](https://img.shields.io/github/v/release/xiaohu31/doubao-voice-helper)](https://github.com/xiaohu31/doubao-voice-helper/releases)
 [![AutoHotkey](https://img.shields.io/badge/AutoHotkey-v2-blue)](https://www.autohotkey.com/)
 
+## 🎬 演示
+
+![演示](assets/demo.gif)
+
 ## ✨ 功能特性
 
 ### 两种输入模式
