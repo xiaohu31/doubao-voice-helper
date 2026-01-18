@@ -1,9 +1,13 @@
-# 豆包语音输入助手
+# 豆包语音输入助手 | Doubao Voice Helper
 
-> Windows 便携式辅助工具，让豆包桌面版的语音输入更加自动化、流畅。
+> 🎙️ Windows 豆包语音输入增强工具 - 一键语音转文字，按住说话自动插入，让豆包桌面版语音输入更高效
 
 [![GitHub release](https://img.shields.io/github/v/release/xiaohu31/doubao-voice-helper)](https://github.com/xiaohu31/doubao-voice-helper/releases)
 [![AutoHotkey](https://img.shields.io/badge/AutoHotkey-v2-blue)](https://www.autohotkey.com/)
+[![Windows](https://img.shields.io/badge/Platform-Windows-0078d4)](https://github.com/xiaohu31/doubao-voice-helper)
+[![License](https://img.shields.io/github/license/xiaohu31/doubao-voice-helper)](LICENSE)
+
+**关键词**: 豆包语音输入 / 语音转文字 / 按键说话 / Voice to Text / Speech Input / Windows 效率工具
 
 ## 🎬 演示
 
