@@ -14,8 +14,7 @@ class Config {
         "AutoStart", 0,
         "FocusRecovery", 1,
         "ShowTrayTip", 1,
-        "ClipboardTimeout", 150,
-        "MinHoldDuration", 300
+        "ClipboardTimeout", 150
     )
 
     ; 当前配置
@@ -80,7 +79,6 @@ class Config {
             this.Current["FocusRecovery"] := Integer(IniRead(filePath, "Advanced", "FocusRecovery", this.Default["FocusRecovery"]))
             this.Current["ShowTrayTip"] := Integer(IniRead(filePath, "Advanced", "ShowTrayTip", this.Default["ShowTrayTip"]))
             this.Current["ClipboardTimeout"] := Integer(IniRead(filePath, "Advanced", "ClipboardTimeout", this.Default["ClipboardTimeout"]))
-            this.Current["MinHoldDuration"] := Integer(IniRead(filePath, "Advanced", "MinHoldDuration", this.Default["MinHoldDuration"]))
 
             return true
         } catch as e {
@@ -104,7 +102,6 @@ class Config {
             IniWrite(this.Current["FocusRecovery"], filePath, "Advanced", "FocusRecovery")
             IniWrite(this.Current["ShowTrayTip"], filePath, "Advanced", "ShowTrayTip")
             IniWrite(this.Current["ClipboardTimeout"], filePath, "Advanced", "ClipboardTimeout")
-            IniWrite(this.Current["MinHoldDuration"], filePath, "Advanced", "MinHoldDuration")
 
             return true
         } catch as e {
@@ -114,7 +111,17 @@ class Config {
 
     ; 获取配置值
     static Get(key) {
-        return this.Current.Has(key) ? this.Current[key] : ""
+        value := this.Current.Has(key) ? this.Current[key] : ""
+
+        ; ClipboardTimeout 边界保护
+        if key = "ClipboardTimeout" {
+            if value = "" || value < 100
+                return 150
+            if value > 200
+                return 200
+        }
+
+        return value
     }
 
     ; 设置配置值

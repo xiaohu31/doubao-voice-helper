@@ -83,21 +83,4 @@ class DoubaoWindow {
     static IsVoiceWindowExist() {
         return this.FindVoiceWindow() != 0
     }
-
-    ; 检查悬浮窗是否有识别内容
-    ; 返回 true 表示有内容（用户说话了）
-    ; 返回 false 表示无内容（"请说话"状态）
-    static HasVoiceContent() {
-        hwnd := this.FindVoiceWindow()
-        if !hwnd
-            return false
-
-        WinGetPos(&x, &y, &w, &h, hwnd)
-
-        ; 高度判断：
-        ; ~200px = "请说话"状态（无内容）
-        ; ~243px+ = 有识别内容
-        ; 阈值设为 220px
-        return h > 220
-    }
 }

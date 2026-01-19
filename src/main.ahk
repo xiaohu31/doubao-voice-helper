@@ -201,9 +201,12 @@ class VoiceController {
             ; 开始说话
             this.OnVoiceStart()
 
-            ; 延迟检测悬浮窗是否弹出（1秒后）
-            SetTimer(() => this.CheckVoiceWindowAfterStart(), -1000)
+            ; 延迟1秒后开始周期性检测悬浮窗状态（每500ms检测一次）
+            SetTimer(() => this.StartVoiceWindowMonitor(), -1000)
         } else {
+            ; 停止悬浮窗监控
+            this.StopVoiceWindowMonitor()
+
             ; 结束说话前，先检查悬浮窗是否还存在
             if !DoubaoWindow.IsVoiceWindowExist() {
                 ; 悬浮窗不存在，说明用户手动关闭了
@@ -248,10 +251,6 @@ class VoiceController {
 
         ; 4. 轮询等待剪贴板变化（带超时）
         timeout := Config.Get("ClipboardTimeout")
-        if timeout = "" || timeout < 100
-            timeout := 150  ; 默认150ms
-        else if timeout > 200
-            timeout := 200  ; 最大200ms
 
         startTime := A_TickCount
         clipboardChanged := false
@@ -290,18 +289,60 @@ class VoiceController {
         HotkeyManager.ResetState()
     }
 
-    ; 检查悬浮窗是否弹出（自由说模式启动后1秒检测）
-    static CheckVoiceWindowAfterStart() {
-        ; 只在自由说模式且正在处理时检查
+    ; 悬浮窗监控定时器引用
+    static VoiceWindowMonitorTimer := 0
+
+    ; 启动悬浮窗监控（自由说模式）
+    static StartVoiceWindowMonitor() {
+        ; 只在自由说模式且正在处理时启动
         if !HotkeyManager.IsFreeMode || !this.IsProcessing
             return
 
-        ; 检查悬浮窗是否存在
+        ; 先检测一次悬浮窗是否弹出
         if !DoubaoWindow.IsVoiceWindowExist() {
-            ; 悬浮窗不存在，重置状态
+            ; 悬浮窗未弹出，重置状态
             this.IsProcessing := false
             HotkeyManager.ResetState()
             this.ShowTrayTip("错误", "豆包悬浮窗未弹出，请检查豆包是否正常运行")
+            return
+        }
+
+        ; 创建周期性定时器（每500ms检测一次）
+        this.VoiceWindowMonitorTimer := ObjBindMethod(this, "CheckVoiceWindowStatus")
+        SetTimer(this.VoiceWindowMonitorTimer, 500)
+    }
+
+    ; 停止悬浮窗监控
+    static StopVoiceWindowMonitor() {
+        if this.VoiceWindowMonitorTimer {
+            SetTimer(this.VoiceWindowMonitorTimer, 0)
+            this.VoiceWindowMonitorTimer := 0
+        }
+    }
+
+    ; 检查悬浮窗状态（周期性调用）
+    static CheckVoiceWindowStatus() {
+        ; 安全检查：如果不在自由说模式或已完成处理，停止监控
+        if !HotkeyManager.IsFreeMode || !this.IsProcessing {
+            this.StopVoiceWindowMonitor()
+            return
+        }
+
+        ; 检测悬浮窗是否被关闭
+        if !DoubaoWindow.IsVoiceWindowExist() {
+            ; 停止监控
+            this.StopVoiceWindowMonitor()
+
+            ; 重置状态
+            this.IsProcessing := false
+            HotkeyManager.ResetState()
+
+            ; 提示用户
+            currentTime := A_TickCount
+            if (currentTime - this.LastTipTime) >= this.TipDebounceInterval {
+                this.ShowTrayTip("提示", "豆包悬浮窗已关闭，语音输入已取消")
+                this.LastTipTime := currentTime
+            }
         }
     }
 
