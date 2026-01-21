@@ -467,10 +467,10 @@ class VoiceController {
 在说话过程中按取消键可以取消本次输入。
 
 【默认触发键】
-- 按着说：鼠标侧键1 (XButton1)
-- 自由说：鼠标侧键2 (XButton2)
-- 按着说+发送：Ctrl+Shift+S
-- 取消键：鼠标侧键2 (XButton2)
+- 按着说：右Ctrl (RCtrl)
+- 自由说：鼠标侧键1 (XButton1)
+- 按着说+发送：左Ctrl+左Win
+- 取消键：Z
 - 可在设置中自定义任意按键或组合键
 
 【配置说明】
