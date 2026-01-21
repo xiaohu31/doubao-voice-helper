@@ -10,23 +10,33 @@ class HotkeyManager {
     ; 模式状态
     static IsHoldMode := false    ; 按着说模式激活中
     static IsFreeMode := false    ; 自由说模式激活中
+    static IsAutoSendHoldMode := false  ; 按着说+自动发送模式激活中
 
     ; 防抖状态
     static LastFreeKeyPressTime := 0  ; 上次自由说按键触发时间
     static FreeKeyDebounceInterval := 500  ; 防抖间隔（毫秒）
 
+    ; 取消键轮询
+    static CancelKey := ""  ; 取消键（AHK格式）
+    static CancelKeyMonitorTimer := 0  ; 取消键监控定时器
+
     ; 回调函数
     static OnHoldStart := ""
     static OnHoldEnd := ""
     static OnFreeToggle := ""
+    static OnAutoSendHoldStart := ""
+    static OnAutoSendHoldEnd := ""
+    static OnCancel := ""  ; 取消回调（按着说+自动发送模式下按取消键）
 
     ; 初始化热键
-    static Init(holdKey, freeKey) {
+    static Init(holdKey, freeKey, autoSendKey := "", cancelKey := "") {
         ; 不需要调用 UnregisterAll()
         ; AutoHotkey v2 允许直接覆盖注册，新的回调会自动替换旧的
 
         holdSuccess := true
         freeSuccess := true
+        autoSendSuccess := true
+        cancelSuccess := true
 
         ; 注册"按着说"热键（会自动覆盖旧的）
         if holdKey != "" {
@@ -38,8 +48,40 @@ class HotkeyManager {
             freeSuccess := this.RegisterFreeHotkey(freeKey)
         }
 
+        ; 注册"按着说+自动发送"热键
+        if autoSendKey != "" {
+            autoSendSuccess := this.RegisterAutoSendHoldHotkey(autoSendKey)
+        }
+
+        ; 保存取消键（用于轮询检测，不注册热键）
+        ; 因为取消键需要在按住自动发送热键时检测，热键注册方式无法工作
+        if cancelKey != "" {
+            this.CancelKey := this.ConvertToGetKeyStateFormat(cancelKey)
+            cancelSuccess := true
+        }
+
         ; 返回注册结果
-        return {hold: holdSuccess, free: freeSuccess}
+        return {hold: holdSuccess, free: freeSuccess, autoSend: autoSendSuccess, cancel: cancelSuccess}
+    }
+
+    ; 将 AHK 热键格式转换为 GetKeyState 格式
+    ; 例如: "z" -> "z", "XButton2" -> "XButton2", "^z" -> "z" (只取主键)
+    static ConvertToGetKeyStateFormat(key) {
+        ; 移除修饰符前缀
+        result := key
+        result := StrReplace(result, "^", "")  ; Ctrl
+        result := StrReplace(result, "!", "")  ; Alt
+        result := StrReplace(result, "+", "")  ; Shift
+        result := StrReplace(result, "#", "")  ; Win
+
+        ; 处理 & 组合键格式，取后面的键
+        if InStr(result, " & ") {
+            parts := StrSplit(result, " & ")
+            if parts.Length >= 2
+                result := parts[2]
+        }
+
+        return result
     }
 
     ; 注册"按着说"热键（需要按下和松开两个事件）
@@ -207,6 +249,84 @@ class HotkeyManager {
         }
     }
 
+    ; ============================================
+    ; 注册"按着说+自动发送"热键（需要按下和松开两个事件）
+    ; ============================================
+    static RegisterAutoSendHoldHotkey(key) {
+        keyName := key
+
+        try {
+            ; 检测是否是 & 组合键格式
+            if InStr(key, " & ") {
+                return this.RegisterAmpersandAutoSendHoldHotkey(key)
+            }
+
+            ; 检测是否是单独修饰键
+            if this.IsSingleModifierKey(key) {
+                return this.RegisterModifierAutoSendHoldHotkey(key)
+            }
+
+            ; 对于纯鼠标按键（无修饰键），使用 ~ 前缀
+            prefix := this.IsPureMouseKey(key) ? "~" : ""
+
+            ; 按下事件
+            Hotkey(prefix . keyName, (*) => this.HandleAutoSendHoldKeyDown())
+            ; 松开事件
+            Hotkey(prefix . keyName . " Up", (*) => this.HandleAutoSendHoldKeyUp())
+
+            this.RegisteredHotkeys["autoSend"] := keyName
+            this.RegisteredHotkeys["autoSend_prefix"] := prefix
+            this.RegisteredHotkeys["autoSend_type"] := "normal"
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    ; 注册单独修饰键作为"按着说+自动发送"热键
+    static RegisterModifierAutoSendHoldHotkey(key) {
+        try {
+            Hotkey(key, (*) => this.HandleAutoSendHoldKeyDown())
+            Hotkey(key . " Up", (*) => this.HandleAutoSendHoldKeyUp())
+
+            this.RegisteredHotkeys["autoSend"] := key
+            this.RegisteredHotkeys["autoSend_prefix"] := ""
+            this.RegisteredHotkeys["autoSend_type"] := "modifier"
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    ; 注册 & 组合键作为"按着说+自动发送"热键
+    static RegisterAmpersandAutoSendHoldHotkey(key) {
+        parts := StrSplit(key, " & ")
+        if parts.Length != 2
+            return false
+
+        prefixKey := parts[1]
+        suffixKey := parts[2]
+
+        try {
+            Hotkey(key, (*) => this.HandleAutoSendHoldKeyDown())
+            Hotkey(prefixKey . " & " . suffixKey . " Up", (*) => this.HandleAutoSendHoldKeyUp())
+
+            try {
+                Hotkey(prefixKey, (*) => {})
+            } catch {
+            }
+
+            this.RegisteredHotkeys["autoSend"] := key
+            this.RegisteredHotkeys["autoSend_prefix"] := ""
+            this.RegisteredHotkeys["autoSend_type"] := "ampersand"
+            this.RegisteredHotkeys["autoSend_prefixKey"] := prefixKey
+            this.RegisteredHotkeys["autoSend_suffixKey"] := suffixKey
+            return true
+        } catch {
+            return false
+        }
+    }
+
     ; 注销所有热键
     static UnregisterAll() {
         ; 注销按着说热键
@@ -272,6 +392,40 @@ class HotkeyManager {
             }
         }
 
+        ; 注销按着说+自动发送热键
+        if this.RegisteredHotkeys.Has("autoSend") {
+            key := this.RegisteredHotkeys["autoSend"]
+            prefix := this.RegisteredHotkeys.Has("autoSend_prefix") ? this.RegisteredHotkeys["autoSend_prefix"] : ""
+            keyType := this.RegisteredHotkeys.Has("autoSend_type") ? this.RegisteredHotkeys["autoSend_type"] : "normal"
+
+            if keyType = "ampersand" {
+                prefixKey := this.RegisteredHotkeys.Has("autoSend_prefixKey") ? this.RegisteredHotkeys["autoSend_prefixKey"] : ""
+                suffixKey := this.RegisteredHotkeys.Has("autoSend_suffixKey") ? this.RegisteredHotkeys["autoSend_suffixKey"] : ""
+
+                try {
+                    Hotkey(key, "Off")
+                } catch {
+                }
+                try {
+                    Hotkey(prefixKey . " & " . suffixKey . " Up", "Off")
+                } catch {
+                }
+            } else {
+                try {
+                    Hotkey(prefix . key, "Off")
+                } catch {
+                }
+                try {
+                    Hotkey(prefix . key . " Up", "Off")
+                } catch {
+                }
+            }
+        }
+
+        ; 停止取消键轮询监控（取消键不再使用热键注册，而是轮询检测）
+        this.StopCancelKeyMonitor()
+        this.CancelKey := ""
+
         this.RegisteredHotkeys.Clear()
         this.ResetState()
     }
@@ -323,10 +477,80 @@ class HotkeyManager {
             this.OnFreeToggle.Call(this.IsFreeMode)
     }
 
+    ; 处理"按着说+自动发送"按下
+    static HandleAutoSendHoldKeyDown() {
+        if this.IsHoldMode || this.IsFreeMode || this.IsAutoSendHoldMode
+            return
+
+        this.IsAutoSendHoldMode := true
+
+        ; 启动取消键轮询监控
+        this.StartCancelKeyMonitor()
+
+        if this.OnAutoSendHoldStart is Func
+            this.OnAutoSendHoldStart.Call()
+    }
+
+    ; 处理"按着说+自动发送"松开
+    static HandleAutoSendHoldKeyUp() {
+        if !this.IsAutoSendHoldMode
+            return
+
+        ; 停止取消键轮询监控
+        this.StopCancelKeyMonitor()
+
+        this.IsAutoSendHoldMode := false
+        if this.OnAutoSendHoldEnd is Func
+            this.OnAutoSendHoldEnd.Call()
+    }
+
+    ; ============================================
+    ; 取消键轮询检测（解决按住自动发送键时无法触发独立热键的问题）
+    ; ============================================
+
+    ; 启动取消键监控
+    static StartCancelKeyMonitor() {
+        if this.CancelKey = ""
+            return
+
+        ; 创建周期性定时器（每50ms检测一次取消键状态）
+        this.CancelKeyMonitorTimer := ObjBindMethod(this, "CheckCancelKeyState")
+        SetTimer(this.CancelKeyMonitorTimer, 50)
+    }
+
+    ; 停止取消键监控
+    static StopCancelKeyMonitor() {
+        if this.CancelKeyMonitorTimer {
+            SetTimer(this.CancelKeyMonitorTimer, 0)
+            this.CancelKeyMonitorTimer := 0
+        }
+    }
+
+    ; 检查取消键状态（周期性调用）
+    static CheckCancelKeyState() {
+        ; 安全检查：如果不在自动发送模式，停止监控
+        if !this.IsAutoSendHoldMode {
+            this.StopCancelKeyMonitor()
+            return
+        }
+
+        ; 使用 GetKeyState 检测取消键是否按下
+        if GetKeyState(this.CancelKey, "P") {
+            ; 取消键被按下，触发取消操作
+            this.StopCancelKeyMonitor()
+            this.IsAutoSendHoldMode := false
+
+            ; 调用取消回调
+            if this.OnCancel is Func
+                this.OnCancel.Call()
+        }
+    }
+
     ; 重置状态
     static ResetState() {
         this.IsHoldMode := false
         this.IsFreeMode := false
+        this.IsAutoSendHoldMode := false
     }
 
     ; 检查是否是纯鼠标按键（不带修饰键）
@@ -357,9 +581,12 @@ class HotkeyManager {
     }
 
     ; 设置回调函数
-    static SetCallbacks(onHoldStart, onHoldEnd, onFreeToggle) {
+    static SetCallbacks(onHoldStart, onHoldEnd, onFreeToggle, onAutoSendHoldStart := "", onAutoSendHoldEnd := "", onCancel := "") {
         this.OnHoldStart := onHoldStart
         this.OnHoldEnd := onHoldEnd
         this.OnFreeToggle := onFreeToggle
+        this.OnAutoSendHoldStart := onAutoSendHoldStart
+        this.OnAutoSendHoldEnd := onAutoSendHoldEnd
+        this.OnCancel := onCancel
     }
 }

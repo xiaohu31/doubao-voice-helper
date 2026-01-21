@@ -6,15 +6,18 @@
 class Config {
     ; 默认配置
     static Default := Map(
-        "HoldToTalkKey", "XButton1",
-        "FreeToTalkKey", "XButton2",
+        "HoldToTalkKey", "RCtrl",
+        "FreeToTalkKey", "XButton1",
+        "AutoSendKey", "LCtrl & LWin",
+        "CancelKey", "z",
+        "AutoSendDelay", 50,
         "DouBaoHotkey", "^d",
-        "InsertDelay", 500,
+        "InsertDelay", 300,
         "ClipboardProtect", 1,
-        "AutoStart", 0,
+        "AutoStart", 1,
         "FocusRecovery", 1,
         "ShowTrayTip", 1,
-        "ClipboardTimeout", 150
+        "ClipboardTimeout", 100
     )
 
     ; 当前配置
@@ -70,6 +73,9 @@ class Config {
             ; General 部分
             this.Current["HoldToTalkKey"] := IniRead(filePath, "General", "HoldToTalkKey", this.Default["HoldToTalkKey"])
             this.Current["FreeToTalkKey"] := IniRead(filePath, "General", "FreeToTalkKey", this.Default["FreeToTalkKey"])
+            this.Current["AutoSendKey"] := IniRead(filePath, "General", "AutoSendKey", this.Default["AutoSendKey"])
+            this.Current["CancelKey"] := IniRead(filePath, "General", "CancelKey", this.Default["CancelKey"])
+            this.Current["AutoSendDelay"] := Integer(IniRead(filePath, "General", "AutoSendDelay", this.Default["AutoSendDelay"]))
             this.Current["DouBaoHotkey"] := IniRead(filePath, "General", "DouBaoHotkey", this.Default["DouBaoHotkey"])
             this.Current["InsertDelay"] := Integer(IniRead(filePath, "General", "InsertDelay", this.Default["InsertDelay"]))
             this.Current["ClipboardProtect"] := Integer(IniRead(filePath, "General", "ClipboardProtect", this.Default["ClipboardProtect"]))
@@ -93,6 +99,9 @@ class Config {
             ; General 部分
             IniWrite(this.Current["HoldToTalkKey"], filePath, "General", "HoldToTalkKey")
             IniWrite(this.Current["FreeToTalkKey"], filePath, "General", "FreeToTalkKey")
+            IniWrite(this.Current["AutoSendKey"], filePath, "General", "AutoSendKey")
+            IniWrite(this.Current["CancelKey"], filePath, "General", "CancelKey")
+            IniWrite(this.Current["AutoSendDelay"], filePath, "General", "AutoSendDelay")
             IniWrite(this.Current["DouBaoHotkey"], filePath, "General", "DouBaoHotkey")
             IniWrite(this.Current["InsertDelay"], filePath, "General", "InsertDelay")
             IniWrite(this.Current["ClipboardProtect"], filePath, "General", "ClipboardProtect")
@@ -111,17 +120,7 @@ class Config {
 
     ; 获取配置值
     static Get(key) {
-        value := this.Current.Has(key) ? this.Current[key] : ""
-
-        ; ClipboardTimeout 边界保护
-        if key = "ClipboardTimeout" {
-            if value = "" || value < 100
-                return 150
-            if value > 200
-                return 200
-        }
-
-        return value
+        return this.Current.Has(key) ? this.Current[key] : ""
     }
 
     ; 设置配置值

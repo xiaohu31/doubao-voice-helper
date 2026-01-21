@@ -22,6 +22,7 @@ class VoiceController {
     ; 状态标志
     static IsProcessing := false
     static IsEnabled := true  ; 是否启用
+    static IsAutoSendEnabled := false  ; 当前是否需要自动发送
 
     ; 防重复提示
     static LastTipTime := 0
@@ -36,7 +37,10 @@ class VoiceController {
         HotkeyManager.SetCallbacks(
             (*) => this.OnVoiceStart(),
             (*) => this.OnHoldEnd(),
-            (isStart) => this.OnFreeToggle(isStart)
+            (isStart) => this.OnFreeToggle(isStart),
+            (*) => this.OnAutoSendVoiceStart(),
+            (*) => this.OnAutoSendHoldEnd(),
+            (*) => this.OnCancel()
         )
 
         ; 设置GUI保存回调
@@ -57,8 +61,10 @@ class VoiceController {
     static InitHotkeys() {
         holdKey := Config.Get("HoldToTalkKey")
         freeKey := Config.Get("FreeToTalkKey")
+        autoSendKey := Config.Get("AutoSendKey")
+        cancelKey := Config.Get("CancelKey")
 
-        result := HotkeyManager.Init(holdKey, freeKey)
+        result := HotkeyManager.Init(holdKey, freeKey, autoSendKey, cancelKey)
 
         ; 检查注册结果并提供反馈
         if !result.hold && holdKey != "" {
@@ -67,6 +73,14 @@ class VoiceController {
 
         if !result.free && freeKey != "" {
             this.ShowTrayTip("热键注册失败", "自由说热键 '" freeKey "' 注册失败，可能与其他程序冲突")
+        }
+
+        if !result.autoSend && autoSendKey != "" {
+            this.ShowTrayTip("热键注册失败", "自动发送热键 '" autoSendKey "' 注册失败，可能与其他程序冲突")
+        }
+
+        if !result.cancel && cancelKey != "" {
+            this.ShowTrayTip("热键注册失败", "取消键 '" cancelKey "' 注册失败，可能与其他程序冲突")
         }
     }
 
@@ -131,16 +145,26 @@ class VoiceController {
         ; 显示当前热键（只读）
         holdKey := Config.Get("HoldToTalkKey")
         freeKey := Config.Get("FreeToTalkKey")
+        autoSendKey := Config.Get("AutoSendKey")
+        cancelKey := Config.Get("CancelKey")
         holdDisplay := GuiManager.KeyToDisplayName(holdKey)
         freeDisplay := GuiManager.KeyToDisplayName(freeKey)
+        autoSendDisplay := GuiManager.KeyToDisplayName(autoSendKey)
+        cancelDisplay := GuiManager.KeyToDisplayName(cancelKey)
 
         holdMenuItem := "🎤 按着说: " . holdDisplay
         freeMenuItem := "🗣️ 自由说: " . freeDisplay
+        autoSendMenuItem := "📤 按着说+发送: " . autoSendDisplay
+        cancelMenuItem := "❌ 取消键: " . cancelDisplay
 
         tray.Add(holdMenuItem, (*) => {})
         tray.Add(freeMenuItem, (*) => {})
+        tray.Add(autoSendMenuItem, (*) => {})
+        tray.Add(cancelMenuItem, (*) => {})
         tray.Disable(holdMenuItem)
         tray.Disable(freeMenuItem)
+        tray.Disable(autoSendMenuItem)
+        tray.Disable(cancelMenuItem)
 
         tray.Add()  ; 分隔线
         tray.Add("关于", (*) => this.ShowAbout())
@@ -229,6 +253,49 @@ class VoiceController {
         }
     }
 
+    ; 按着说+自动发送模式开始
+    static OnAutoSendVoiceStart() {
+        ; 如果已经在处理中或已禁用，忽略本次触发
+        if this.IsProcessing || !this.IsEnabled
+            return
+
+        this.IsProcessing := true
+        this.IsAutoSendEnabled := true  ; 标记需要自动发送
+
+        ; 1. 记录当前焦点窗口
+        WindowManager.SaveCurrentWindow()
+
+        ; 2. 发送豆包快捷键
+        doubaoHotkey := Config.Get("DouBaoHotkey")
+        SendInput(doubaoHotkey)
+    }
+
+    ; 按着说+自动发送模式松开
+    static OnAutoSendHoldEnd() {
+        if !this.IsProcessing
+            return
+
+        ; 执行插入流程（会检查 IsAutoSendEnabled 标志）
+        this.DoInsertProcess()
+    }
+
+    ; 取消语音输入（在按着说+自动发送模式下按取消键触发）
+    static OnCancel() {
+        if !this.IsProcessing
+            return
+
+        ; 发送ESC关闭豆包悬浮窗
+        DoubaoWindow.SendEscape()
+
+        ; 重置状态
+        this.IsProcessing := false
+        this.IsAutoSendEnabled := false
+        HotkeyManager.ResetState()
+
+        ; 显示提示（可选）
+        this.ShowTrayTip("提示", "语音输入已取消")
+    }
+
     ; 执行插入流程
     static DoInsertProcess() {
         ; 0. 检查豆包是否在运行
@@ -251,6 +318,9 @@ class VoiceController {
 
         ; 4. 轮询等待剪贴板变化（带超时）
         timeout := Config.Get("ClipboardTimeout")
+        ; 运行时最小值保护：确保至少有100ms检测时间，否则可能在豆包写入剪贴板前就超时
+        if timeout < 100
+            timeout := 100
 
         startTime := A_TickCount
         clipboardChanged := false
@@ -273,6 +343,13 @@ class VoiceController {
             ; 等待豆包完成粘贴操作（豆包写入剪贴板后还需要时间执行粘贴）
             Sleep(150)
 
+            ; 自动发送逻辑：如果是自动发送模式，发送回车键
+            if this.IsAutoSendEnabled {
+                autoSendDelay := Config.Get("AutoSendDelay")
+                Sleep(autoSendDelay)  ; 等待内容完全粘贴
+                SendInput("{Enter}")
+            }
+
             ; 如果开启剪贴板保护，恢复用户原来的剪贴板内容
             if Config.Get("ClipboardProtect")
                 ClipboardManager.Restore()
@@ -286,6 +363,7 @@ class VoiceController {
 
         ; 重置状态
         this.IsProcessing := false
+        this.IsAutoSendEnabled := false  ; 重置自动发送标志
         HotkeyManager.ResetState()
     }
 
@@ -383,9 +461,16 @@ class VoiceController {
 点击触发键开始说话，再次点击结束并插入识别结果。
 适合长时间语音输入，不限时长。
 
+【按着说+自动发送模式】
+按住触发键说话，松开后自动插入识别结果并发送（按回车）。
+适合快速聊天场景，说完即发。
+在说话过程中按取消键可以取消本次输入。
+
 【默认触发键】
-- 按着说：鼠标侧键1 (XButton1) 或 F1
-- 自由说：鼠标侧键2 (XButton2) 或 F2
+- 按着说：鼠标侧键1 (XButton1)
+- 自由说：鼠标侧键2 (XButton2)
+- 按着说+发送：Ctrl+Shift+S
+- 取消键：鼠标侧键2 (XButton2)
 - 可在设置中自定义任意按键或组合键
 
 【配置说明】

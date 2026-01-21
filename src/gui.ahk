@@ -18,6 +18,8 @@ class GuiManager {
     ; 控件引用
     static HoldKeyEdit := ""
     static FreeKeyEdit := ""
+    static AutoSendKeyEdit := ""
+    static CancelKeyEdit := ""
     static DouBaoHotkeyEdit := ""
     static InsertDelaySlider := ""
     static InsertDelayText := ""
@@ -27,10 +29,13 @@ class GuiManager {
 
     ; 高级设置控件
     static ClipboardTimeoutEdit := ""
+    static AutoSendDelayEdit := ""
 
     ; 录制按钮引用
     static HoldRecordBtn := ""
     static FreeRecordBtn := ""
+    static AutoSendRecordBtn := ""
+    static CancelRecordBtn := ""
     static DouBaoRecordBtn := ""
 
     ; 创建主窗口
@@ -55,41 +60,58 @@ class GuiManager {
         this.FreeRecordBtn.OnEvent("Click", (*) => this.StartRecording("free"))
         this.MainGui.AddText("x20 y150 cGray", "点击开始，再次点击结束并插入")
 
+        ; ===== 按着说+自动发送模式 =====
+        this.MainGui.AddGroupBox("x10 y190 w380 h105", "【按着说+自动发送】模式")
+        this.MainGui.AddText("x20 y215", "触发按键：")
+        this.AutoSendKeyEdit := this.MainGui.AddEdit("x90 y212 w180 ReadOnly", "")
+        this.AutoSendRecordBtn := this.MainGui.AddButton("x280 y210 w80 h25", "录制")
+        this.AutoSendRecordBtn.OnEvent("Click", (*) => this.StartRecording("autoSend"))
+        this.MainGui.AddText("x20 y242", "取消按键：")
+        this.CancelKeyEdit := this.MainGui.AddEdit("x90 y239 w180 ReadOnly", "")
+        this.CancelRecordBtn := this.MainGui.AddButton("x280 y237 w80 h25", "录制")
+        this.CancelRecordBtn.OnEvent("Click", (*) => this.StartRecording("cancel"))
+        this.MainGui.AddText("x20 y267 cGray", "按住说话松开发送，说话中按取消键可取消")
+
         ; ===== 分隔线 =====
-        this.MainGui.AddText("x10 y190 w380 h1 0x10")  ; 水平线
+        this.MainGui.AddText("x10 y305 w380 h1 0x10")  ; 水平线
 
         ; ===== 豆包快捷键 =====
-        this.MainGui.AddText("x20 y200", "豆包快捷键：")
-        this.DouBaoHotkeyEdit := this.MainGui.AddEdit("x110 y197 w160 ReadOnly", "")
-        this.DouBaoRecordBtn := this.MainGui.AddButton("x280 y195 w80 h25", "录制")
+        this.MainGui.AddText("x20 y315", "豆包快捷键：")
+        this.DouBaoHotkeyEdit := this.MainGui.AddEdit("x110 y312 w160 ReadOnly", "")
+        this.DouBaoRecordBtn := this.MainGui.AddButton("x280 y310 w80 h25", "录制")
         this.DouBaoRecordBtn.OnEvent("Click", (*) => this.StartRecording("doubao"))
 
         ; ===== 插入延迟 =====
-        this.MainGui.AddText("x20 y235", "插入延迟：")
-        this.InsertDelaySlider := this.MainGui.AddSlider("x110 y232 w180 Range150-5000 TickInterval500", 500)
+        this.MainGui.AddText("x20 y350", "插入延迟：")
+        this.InsertDelaySlider := this.MainGui.AddSlider("x110 y347 w180 Range0-5000 TickInterval500", 500)
         this.InsertDelaySlider.OnEvent("Change", (*) => this.OnDelaySliderChange())
-        this.InsertDelayText := this.MainGui.AddText("x300 y235 w80", "0.5 秒")
+        this.InsertDelayText := this.MainGui.AddText("x300 y350 w80", "0.5 秒")
 
         ; ===== 复选框选项 =====
-        this.ClipboardProtectCheck := this.MainGui.AddCheckbox("x20 y270", "剪贴板保护（防止覆盖原有复制内容）")
+        this.ClipboardProtectCheck := this.MainGui.AddCheckbox("x20 y385", "剪贴板保护（防止覆盖原有复制内容）")
         this.ClipboardProtectCheck.Value := 1
 
-        this.AutoStartCheck := this.MainGui.AddCheckbox("x20 y295", "开机自启动")
+        this.AutoStartCheck := this.MainGui.AddCheckbox("x20 y410", "开机自启动")
 
         ; ===== 高级设置 =====
-        this.MainGui.AddGroupBox("x10 y325 w380 h70", "高级设置")
+        this.MainGui.AddGroupBox("x10 y440 w380 h95", "高级设置")
 
-        this.MainGui.AddText("x20 y350", "剪贴板超时：")
-        this.ClipboardTimeoutEdit := this.MainGui.AddEdit("x110 y347 w80 Number", "150")
-        this.MainGui.AddText("x195 y350", "ms")
-        this.MainGui.AddText("x230 y350 cGray", "(范围 100-200)")
+        this.MainGui.AddText("x20 y465", "剪贴板超时：")
+        this.ClipboardTimeoutEdit := this.MainGui.AddEdit("x110 y462 w80 Number", "100")
+        this.MainGui.AddText("x195 y465", "ms")
+        this.MainGui.AddText("x230 y465 cGray", "(最小 100)")
+
+        this.MainGui.AddText("x20 y495", "发送延迟：")
+        this.AutoSendDelayEdit := this.MainGui.AddEdit("x110 y492 w80 Number", "50")
+        this.MainGui.AddText("x195 y495", "ms")
+        this.MainGui.AddText("x230 y495 cGray", "(推荐 0~100)")
 
         ; ===== 按钮 =====
-        this.MainGui.AddButton("x100 y410 w80 h30", "保存").OnEvent("Click", (*) => this.OnSave())
-        this.MainGui.AddButton("x200 y410 w80 h30", "取消").OnEvent("Click", (*) => this.OnCancel())
+        this.MainGui.AddButton("x100 y550 w80 h30", "保存").OnEvent("Click", (*) => this.OnSave())
+        this.MainGui.AddButton("x200 y550 w80 h30", "取消").OnEvent("Click", (*) => this.OnCancel())
 
         ; ===== 状态栏 =====
-        this.StatusText := this.MainGui.AddText("x20 y455 w360 cGreen", "状态: ● 已就绪")
+        this.StatusText := this.MainGui.AddText("x20 y595 w360 cGreen", "状态: ● 已就绪")
     }
 
     ; 显示主窗口
@@ -100,7 +122,7 @@ class GuiManager {
         ; 加载当前配置到界面
         this.LoadConfigToGui()
 
-        this.MainGui.Show("w400 h490")
+        this.MainGui.Show("w400 h630")
     }
 
     ; 隐藏主窗口
@@ -119,6 +141,14 @@ class GuiManager {
         freeKey := Config.Get("FreeToTalkKey")
         this.FreeKeyEdit.Value := this.KeyToDisplayName(freeKey)
 
+        ; 自动发送按键
+        autoSendKey := Config.Get("AutoSendKey")
+        this.AutoSendKeyEdit.Value := this.KeyToDisplayName(autoSendKey)
+
+        ; 取消按键
+        cancelKey := Config.Get("CancelKey")
+        this.CancelKeyEdit.Value := this.KeyToDisplayName(cancelKey)
+
         ; 豆包快捷键
         doubaoKey := Config.Get("DouBaoHotkey")
         this.DouBaoHotkeyEdit.Value := this.KeyToDisplayName(doubaoKey)
@@ -136,6 +166,7 @@ class GuiManager {
 
         ; 高级设置
         this.ClipboardTimeoutEdit.Value := Config.Get("ClipboardTimeout")
+        this.AutoSendDelayEdit.Value := Config.Get("AutoSendDelay")
     }
 
     ; 从界面保存配置
@@ -147,6 +178,14 @@ class GuiManager {
         ; 自由说按键
         freeDisplay := this.FreeKeyEdit.Value
         Config.Set("FreeToTalkKey", this.DisplayNameToKey(freeDisplay))
+
+        ; 自动发送按键
+        autoSendDisplay := this.AutoSendKeyEdit.Value
+        Config.Set("AutoSendKey", this.DisplayNameToKey(autoSendDisplay))
+
+        ; 取消按键
+        cancelDisplay := this.CancelKeyEdit.Value
+        Config.Set("CancelKey", this.DisplayNameToKey(cancelDisplay))
 
         ; 豆包快捷键
         doubaoDisplay := this.DouBaoHotkeyEdit.Value
@@ -164,11 +203,15 @@ class GuiManager {
 
         ; 高级设置
         clipboardTimeout := this.ClipboardTimeoutEdit.Value
-        if clipboardTimeout = "" || clipboardTimeout < 100
-            clipboardTimeout := 150
-        else if clipboardTimeout > 200
-            clipboardTimeout := 200
+        if clipboardTimeout = ""
+            clipboardTimeout := 100  ; 空值使用默认值
         Config.Set("ClipboardTimeout", Integer(clipboardTimeout))
+
+        ; 自动发送延迟
+        autoSendDelay := this.AutoSendDelayEdit.Value
+        if autoSendDelay = ""
+            autoSendDelay := 50  ; 空值使用默认值
+        Config.Set("AutoSendDelay", Integer(autoSendDelay))
 
         ; 保存到文件
         Config.Save()
@@ -403,6 +446,10 @@ class GuiManager {
             this.HoldRecordBtn.Text := "按下..."
         else if mode = "free"
             this.FreeRecordBtn.Text := "按下..."
+        else if mode = "autoSend"
+            this.AutoSendRecordBtn.Text := "按下..."
+        else if mode = "cancel"
+            this.CancelRecordBtn.Text := "按下..."
         else if mode = "doubao"
             this.DouBaoRecordBtn.Text := "按下..."
 
@@ -554,6 +601,10 @@ class GuiManager {
             this.HoldKeyEdit.Value := displayName
         else if this.RecordingFor = "free"
             this.FreeKeyEdit.Value := displayName
+        else if this.RecordingFor = "autoSend"
+            this.AutoSendKeyEdit.Value := displayName
+        else if this.RecordingFor = "cancel"
+            this.CancelKeyEdit.Value := displayName
         else if this.RecordingFor = "doubao"
             this.DouBaoHotkeyEdit.Value := displayName
     }
@@ -568,6 +619,10 @@ class GuiManager {
             this.HoldRecordBtn.Text := "录制"
         else if this.RecordingFor = "free"
             this.FreeRecordBtn.Text := "录制"
+        else if this.RecordingFor = "autoSend"
+            this.AutoSendRecordBtn.Text := "录制"
+        else if this.RecordingFor = "cancel"
+            this.CancelRecordBtn.Text := "录制"
         else if this.RecordingFor = "doubao"
             this.DouBaoRecordBtn.Text := "录制"
 
@@ -633,6 +688,10 @@ class GuiManager {
             this.HoldKeyEdit.Value := this.KeyToDisplayName(Config.Get("HoldToTalkKey"))
         else if this.RecordingFor = "free"
             this.FreeKeyEdit.Value := this.KeyToDisplayName(Config.Get("FreeToTalkKey"))
+        else if this.RecordingFor = "autoSend"
+            this.AutoSendKeyEdit.Value := this.KeyToDisplayName(Config.Get("AutoSendKey"))
+        else if this.RecordingFor = "cancel"
+            this.CancelKeyEdit.Value := this.KeyToDisplayName(Config.Get("CancelKey"))
         else if this.RecordingFor = "doubao"
             this.DouBaoHotkeyEdit.Value := this.KeyToDisplayName(Config.Get("DouBaoHotkey"))
     }
@@ -661,12 +720,18 @@ class GuiManager {
         ; 检查与已配置的其他热键冲突
         holdKey := this.DisplayNameToKey(this.HoldKeyEdit.Value)
         freeKey := this.DisplayNameToKey(this.FreeKeyEdit.Value)
+        autoSendKey := this.DisplayNameToKey(this.AutoSendKeyEdit.Value)
+        cancelKey := this.DisplayNameToKey(this.CancelKeyEdit.Value)
         doubaoKey := this.DisplayNameToKey(this.DouBaoHotkeyEdit.Value)
 
         if this.RecordingFor != "hold" && newKey = holdKey
             conflicts.Push("按着说触发键")
         if this.RecordingFor != "free" && newKey = freeKey
             conflicts.Push("自由说触发键")
+        if this.RecordingFor != "autoSend" && newKey = autoSendKey
+            conflicts.Push("自动发送触发键")
+        if this.RecordingFor != "cancel" && newKey = cancelKey
+            conflicts.Push("取消键")
         if this.RecordingFor != "doubao" && newKey = doubaoKey
             conflicts.Push("豆包快捷键")
 
